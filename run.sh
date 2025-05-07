@@ -24,12 +24,6 @@ else
     echo "Visit https://www.mongodb.com/docs/manual/installation/ for installation instructions."
 fi
 
-# Start the backend server in a new terminal
-echo "Starting backend server..."
-# Get the absolute path to the script directory
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR/backend"
-
 # Create and use a virtual environment
 if [ ! -d "venv" ]; then
     echo "Creating Python virtual environment..."
@@ -62,6 +56,12 @@ if [ -f "requirements.txt" ]; then
 else
     echo "Warning: requirements.txt not found. Dependencies may be missing."
 fi
+
+# Start the backend server in a new terminal
+echo "Starting backend server..."
+# Get the absolute path to the script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/backend"
 
 # Run the backend using the Python from the virtual environment
 python run.py &
