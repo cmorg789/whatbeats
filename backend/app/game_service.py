@@ -7,6 +7,63 @@ from . import database
 from . import llm_service
 from . import count_range_service
 
+# Known relationships dictionary for validation
+# Format: {item1: {item2: True/False}} where True means item2 beats item1
+KNOWN_RELATIONSHIPS = {
+    # Rock-Paper-Scissors relationships
+    "rock": {"paper": True, "scissors": False, "lizard": False, "spock": True},
+    "paper": {"rock": False, "scissors": True, "lizard": True, "spock": False},
+    "scissors": {"rock": True, "paper": False, "lizard": False, "spock": True},
+    
+    # Rock-Paper-Scissors-Lizard-Spock extensions
+    "lizard": {"rock": True, "paper": False, "scissors": True, "spock": False},
+    "spock": {"rock": False, "paper": True, "scissors": False, "lizard": True},
+    
+    # Common physical relationships
+    "fire": {"water": True, "paper": False, "wood": False, "ice": False},
+    "water": {"fire": False, "paper": False, "electricity": True},
+    "ice": {"fire": True, "water": False},
+    
+    # Card game hierarchies
+    "ace": {"king": False, "queen": False, "jack": False},
+    "king": {"ace": True, "queen": False, "jack": False},
+    "queen": {"king": True, "jack": False, "ace": True},
+    "jack": {"queen": True, "king": True, "ace": True},
+    
+    # Temporal relationships
+    "butterfly": {"caterpillar": False},
+    "caterpillar": {"butterfly": True},
+    "adult": {"child": False},
+    "child": {"adult": True}
+}
+
+def validate_against_known_relationships(item1: str, item2: str) -> Optional[bool]:
+    """
+    Validate a comparison against known relationships.
+    
+    Args:
+        item1: The first item (current item)
+        item2: The second item (user input)
+        
+    Returns:
+        Optional[bool]: True if item2 beats item1, False if item1 beats item2,
+                       None if the relationship is not in the known relationships
+    """
+    # Normalize inputs
+    item1 = item1.lower().strip()
+    item2 = item2.lower().strip()
+    
+    # Check if the relationship is in the known relationships
+    if item1 in KNOWN_RELATIONSHIPS and item2 in KNOWN_RELATIONSHIPS[item1]:
+        return KNOWN_RELATIONSHIPS[item1][item2]
+    
+    # Check the reverse relationship
+    if item2 in KNOWN_RELATIONSHIPS and item1 in KNOWN_RELATIONSHIPS[item2]:
+        return not KNOWN_RELATIONSHIPS[item2][item1]
+    
+    # Relationship not found
+    return None
+
 def validate_user_input(user_input: str) -> Tuple[bool, str]:
     """
     Validate user input to prevent prompt injection and ensure data quality.
@@ -102,26 +159,68 @@ async def process_comparison(session_id: str, current_item: str, user_input: str
     # Check if this comparison already exists in the database
     existing_comparison = await database.get_comparison(current_item, user_input)
     
+    # Check against known relationships first
+    known_result = validate_against_known_relationships(current_item, user_input)
+    
     if existing_comparison:
+        # Get the stored result
+        stored_result = existing_comparison["item2_wins"]  # user_input is item2
+        
+        # If we have a known relationship that contradicts the stored result,
+        # update the stored comparison with the correct result
+        if known_result is not None and known_result != stored_result:
+            # Log the correction
+            print(f"Correcting stored relationship: {current_item} vs {user_input}. "
+                  f"Stored: {stored_result}, Known correct: {known_result}")
+            
+            # Override the incorrect stored judgment with the known correct one
+            await database.update_comparison(
+                item1=current_item,
+                item2=user_input,
+                item1_wins=not known_result,  # If user_input wins, current_item loses
+                item2_wins=known_result,      # If user_input wins, it's true
+                description=existing_comparison["description"],  # Keep the original description
+                emoji=existing_comparison["emoji"]               # Keep the original emoji
+            )
+            # Use the known correct result
+            result = known_result
+            description = existing_comparison["description"]
+            emoji = existing_comparison["emoji"]
+        else:
+            # Use the stored result
+            result = stored_result
+            description = existing_comparison["description"]
+            emoji = existing_comparison["emoji"]
+        
         # Increment the count for this comparison
         await database.increment_comparison_count(current_item, user_input)
         
-        # Get the result from the existing comparison
-        result = existing_comparison["item2_wins"]  # user_input is item2
-        description = existing_comparison["description"]
-        emoji = existing_comparison["emoji"]
         # Get the updated count (it was just incremented)
         count = existing_comparison["count"] + 1
         
         # Get count range description and emoji
         count_range_description, count_range_emoji = await count_range_service.get_count_range_description(count)
     else:
-        # This is a new comparison, query the LLM
-        comparison_result = await llm_service.determine_comparison(current_item, user_input)
+        # This is a new comparison
         
-        result = comparison_result["result"]
-        description = comparison_result["description"]
-        emoji = comparison_result["emoji"]
+        # If we have a known relationship, use it instead of querying the LLM
+        if known_result is not None:
+            result = known_result
+            # Generate a description and emoji for the known relationship
+            if result:
+                description = f"{user_input} triumphantly overcomes {current_item} in this classic matchup!"
+                emoji = "🏆"
+            else:
+                description = f"{user_input} fails to beat {current_item} in this well-known interaction."
+                emoji = "❌"
+        else:
+            # Query the LLM for unknown relationships
+            comparison_result = await llm_service.determine_comparison(current_item, user_input)
+            
+            result = comparison_result["result"]
+            description = comparison_result["description"]
+            emoji = comparison_result["emoji"]
+        
         # This is a new comparison, so count is 1
         count = 1
         

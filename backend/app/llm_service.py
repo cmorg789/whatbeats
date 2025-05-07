@@ -163,19 +163,43 @@ Given the following comparison:
 <current_item>{safe_current_item}</current_item>
 <user_input>{safe_user_input}</user_input>
 
-Determine if the user's suggestion beats the current item by considering:
-1. Physical properties (e.g., state of matter, temperature, hardness, sharpness)
-2. Chemical reactions (e.g., water dissolving paper, acid corroding metal)
-3. Natural interactions (e.g., fire burning wood, wind extinguishing flame)
-4. Logical cause-and-effect relationships (e.g., scissors cutting paper)
-5. If the interaction is uncertain, indirect, reversible, or lacks explicit evidence, the challenger loses.
+Determine if the user's suggestion beats the current item by considering the following, evaluated in the order presented. Rules from higher categories override lower ones:
 
-Be creative but logical - focus on realistic ways these items would interact if they encountered each other in the real world. Consider both obvious and less obvious interactions based on the items' properties.
+    ESTABLISHED GAME RELATIONSHIPS - These are definitive and must be respected:
+        Rock-Paper-Scissors rules: Paper beats rock, rock beats scissors, scissors beats paper
+        Rock-Paper-Scissors-Lizard-Spock extensions: Lizard beats paper and Spock, Spock beats rock and scissors
+        Card game hierarchies: Ace beats King, King beats Queen, etc.
+        Chess piece values: Queen beats Rook, Rook beats Bishop/Knight, etc.
+
+    PHYSICAL PROPERTIES:
+        State of matter: Gas can disperse liquids, liquids can dissolve solids
+        Temperature: Hot items melt cold items, extreme cold freezes liquids
+        Hardness: Diamond scratches glass, metal dents wood
+        Sharpness: Knife cuts rope, scissors cut paper
+
+    CHEMICAL REACTIONS:
+        Water dissolves salt/sugar, acid corrodes metal
+        Fire burns paper/wood, water extinguishes fire
+        Rust degrades iron, bleach removes color
+
+    TEMPORAL/PROCESS RELATIONSHIPS:
+        For time-based interactions, the later stage generally beats the earlier stage
+        Example: Butterfly beats caterpillar, adult beats child, cooked food beats raw ingredients
+        The more evolved or processed form typically wins
+
+    DEFINITIVE JUDGMENT CRITERIA:
+        The relationship must be DIRECT and INEVITABLE when the items interact (e.g., a 'Seed' doesn't directly beat 'Barren Land' just because it could grow there with water and time; the interaction isn't immediate or guaranteed upon contact without external factors).
+        The winning item must cause a significant, irreversible change or neutralization of the other.
+        An item cannot beat an identical item unless a Temporal/Process Relationship applies.
+        If the interaction is UNCERTAIN, REVERSIBLE, has NO significant effect, or requires specific unstated circumstances, the challenger LOSES.
+        When in doubt, consider what would happen if these items physically encountered each other.
+        **LAST RESORT FOR ABSTRACTS: If one or both items are primarily philosophical/abstract AND no other rule above yields a clear winner or loser, you MAY consider if one concept is broadly considered more foundational or encompassing. If still indeterminate, and only in this specific scenario, a playfully creative or humorous interpretation that favors one item decisively (explaining the humorous logic) can be used. If no such interpretation is readily apparent, the challenger loses.**
 
 Your response will be automatically formatted as JSON with the following fields:
-- result: A boolean indicating if the user's suggestion beats the current item
-- description: A brief explanation (<30 words) of why the result is true or false. Make it creative and slightly goofy. Don't use the word "literally"
-- emoji: A single relevant emoji that represents the outcome. Do NOT use the cross mark emoji except on failures (❌)!
+
+    result: A boolean indicating if the user's suggestion beats the current item
+    description: A brief explanation (<30 words) of why the result is true or false. Make it creative and slightly goofy. Don't use the word "literally."
+    emoji: A single relevant emoji that represents the outcome. Do NOT use the cross mark emoji except on failures (❌)!
 """
     
     # Prepare the API request
