@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Beats Rock? - Admin</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>What Beats Rock? - Admin Dashboard</h1>
+            <p class="subtitle">Manage reports and comparisons</p>
+        </header>
+
+        <main>
+            <section id="admin-section">
+                <h2>Admin Dashboard</h2>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="reports">Reports</button>
+                </div>
+                
+                <div id="reports-tab" class="tab-content">
+                    <div class="admin-filters">
+                        <div class="filter-group">
+                            <label for="report-status-filter">Status:</label>
+                            <div class="multi-select-container">
+                                <div class="multi-select-options">
+                                    <div class="multi-select-option">
+                                        <input type="checkbox" id="status-all" value="" class="status-checkbox" checked>
+                                        <label for="status-all">All</label>
+                                    </div>
+                                    <div class="multi-select-option">
+                                        <input type="checkbox" id="status-pending" value="pending" class="status-checkbox">
+                                        <label for="status-pending">Pending</label>
+                                    </div>
+                                    <div class="multi-select-option">
+                                        <input type="checkbox" id="status-reviewed" value="reviewed" class="status-checkbox">
+                                        <label for="status-reviewed">Reviewed</label>
+                                    </div>
+                                    <div class="multi-select-option">
+                                        <input type="checkbox" id="status-approved" value="approved" class="status-checkbox">
+                                        <label for="status-approved">Approved</label>
+                                    </div>
+                                    <div class="multi-select-option">
+                                        <input type="checkbox" id="status-rejected" value="rejected" class="status-checkbox">
+                                        <label for="status-rejected">Rejected</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="reports-table-container">
+                        <table id="reports-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Item 1</th>
+                                    <th>Item 2</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reports-body"></tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="admin-pagination">
+                        <button id="prev-reports-page-btn" class="pagination-btn" disabled>&lt; Previous</button>
+                        <span id="reports-page-info">Page 1 of 1</span>
+                        <button id="next-reports-page-btn" class="pagination-btn" disabled>Next &gt;</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <div class="footer-buttons">
+                <button id="back-to-game-btn" class="primary-btn">Back to Game</button>
+            </div>
+        </footer>
+        
+        <!-- Edit Comparison Modal -->
+        <div id="edit-comparison-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-btn" id="close-edit-comparison-modal">&times;</span>
+                <h2>Edit Comparison</h2>
+                
+                <form id="edit-comparison-form">
+                    <div class="form-group">
+                        <label for="edit-item1">Item 1:</label>
+                        <input type="text" id="edit-item1" readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-item2">Item 2:</label>
+                        <input type="text" id="edit-item2" readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Result:</label>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="result" id="item1-wins" value="item1">
+                                Item 1 beats Item 2
+                            </label>
+                            <label>
+                                <input type="radio" name="result" id="item2-wins" value="item2">
+                                Item 2 beats Item 1
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-description">Description:</label>
+                        <textarea id="edit-description" placeholder="Explain why one item beats the other"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-emoji">Emoji:</label>
+                        <input type="text" id="edit-emoji" placeholder="Enter a relevant emoji">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="cancel-edit-btn" class="secondary-btn">Cancel</button>
+                        <button type="submit" id="save-comparison-btn" class="primary-btn">Save Changes</button>
+                    </div>
+                </form>
+                
+                <div id="edit-success" class="hidden">
+                    <p class="success-message">Comparison updated successfully!</p>
+                    <button type="button" id="close-edit-success-btn" class="primary-btn">Close</button>
+                </div>
+                
+                <div id="edit-error" class="hidden">
+                    <p class="error-message">There was an error updating the comparison. Please try again.</p>
+                    <button type="button" id="retry-edit-btn" class="primary-btn">Try Again</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="api.js"></script>
+    <script src="admin.js"></script>
+</body>
+</html>

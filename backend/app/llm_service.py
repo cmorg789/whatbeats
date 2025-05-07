@@ -1,0 +1,486 @@
+import os
+import json
+import httpx
+import logging
+import pathlib
+from typing import Dict, Any, Tuple, Optional
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# LLM API settings
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+LLM_API_URL = os.getenv("LLM_API_URL", "https://openrouter.ai/api/v1/chat/completions")
+LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-3.5-turbo")
+
+# Timeout for API requests (in seconds)
+TIMEOUT = 30.0
+
+# Logging configuration
+LOGGING_ENABLED = os.getenv("LLM_LOGGING_ENABLED", "true").lower() == "true"
+LOG_LEVEL = os.getenv("LLM_LOG_LEVEL", "INFO")
+LOG_DIR = os.getenv("LLM_LOG_DIR", "logs")
+LOG_FILE = os.getenv("LLM_LOG_FILE", "llm_responses.log")
+
+# Set up logger
+logger = logging.getLogger("llm_service")
+
+# Configure logging if enabled
+if LOGGING_ENABLED:
+    # Create logs directory if it doesn't exist
+    log_path = pathlib.Path(LOG_DIR)
+    log_path.mkdir(exist_ok=True)
+    
+    # Set log level
+    level = getattr(logging, LOG_LEVEL.upper(), logging.INFO)
+    logger.setLevel(level)
+    
+    # Create file handler
+    file_handler = logging.FileHandler(os.path.join(LOG_DIR, LOG_FILE))
+    file_handler.setLevel(level)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    
+    # Add handler to logger
+    logger.addHandler(file_handler)
+    
+    logger.info("LLM logging initialized")
+else:
+    # Set up null handler if logging is disabled
+    logger.addHandler(logging.NullHandler())
+
+
+async def query_llm(current_item: str, user_input: str) -> Tuple[bool, str, str]:
+    """
+    Query the LLM to determine if user_input beats current_item.
+    
+    This function sends a request to the LLM API (OpenRouter/OpenAI) with a prompt
+    asking if the user's input beats the current item. It uses OpenRouter's structured
+    output feature with JSON schema validation to ensure consistent response formatting.
+    The function parses the JSON response to extract the result (true/false), a
+    description of why, and a relevant emoji.
+    
+    Args:
+        current_item: The current item in the game
+        user_input: The user's input for what beats the current item
+        
+    Returns:
+        Tuple of (result: bool, description: str, emoji: str)
+        
+    Raises:
+        ValueError: If the LLM_API_KEY environment variable is not set
+        httpx.RequestError: If there's an error communicating with the API
+        httpx.HTTPStatusError: If the API returns an error status code
+        json.JSONDecodeError: If the response cannot be parsed as JSON despite schema validation
+    """
+    if not LLM_API_KEY:
+        raise ValueError("LLM_API_KEY environment variable is not set")
+    
+    # Construct the prompt
+    prompt = f"""
+You are judging a game of "What Beats What" where items compete based on their real-world properties and interactions.
+Given the following comparison:
+- Current item: {current_item}
+- User's suggestion: {user_input}
+
+Determine if the user's suggestion beats the current item by considering:
+1. Physical properties (e.g., state of matter, temperature, hardness, sharpness)
+2. Chemical reactions (e.g., water dissolving paper, acid corroding metal)
+3. Natural interactions (e.g., fire burning wood, wind extinguishing flame)
+4. Logical cause-and-effect relationships (e.g., scissors cutting paper)
+5. If the interaction is uncertain, indirect, reversible, or lacks explicit evidence, the challenger loses.
+
+Be creative but logical - focus on realistic ways these items would interact if they encountered each other in the real world. Consider both obvious and less obvious interactions based on the items' properties.
+
+Your response will be automatically formatted as JSON with the following fields:
+- result: A boolean indicating if the user's suggestion beats the current item
+- description: A brief explanation (<30 words) of why the result is true or false. Make it creative and slightly goofy. Don't use the word "literally" 
+- emoji: A single relevant emoji that represents the outcome. Do NOT use the cross mark emoji except on failures (❌)!
+"""
+    
+    # Prepare the API request
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LLM_API_KEY}"
+    }
+    
+    # Define JSON schema for structured output
+    json_schema = {
+        "type": "object",
+        "properties": {
+            "result": {
+                "type": "boolean",
+                "description": "Whether the user's suggestion beats the current item"
+            },
+            "description": {
+                "type": "string",
+                "description": "Brief explanation of why the result is true or false (<30 words)"
+            },
+            "emoji": {
+                "type": "string",
+                "description": "Single relevant emoji that represents the outcome"
+            }
+        },
+        "required": ["result", "description", "emoji"],
+        "additionalProperties": False
+    }
+    
+    payload = {
+        "model": LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are a creative and logical judge for the game 'What Beats What'. You evaluate items based on their real-world properties and how they would naturally interact with each other. Your judgments should be based on realistic physics, chemistry, and natural laws, while still allowing for creative thinking."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 150,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "whatbeats_judgment",
+                "strict": True,
+                "schema": json_schema
+            }
+        }
+    }
+    
+    try:
+        if LOGGING_ENABLED:
+            logger.info(f"Querying LLM for comparison: '{current_item}' vs '{user_input}'")
+            logger.info(f"Request payload: {json.dumps(payload, indent=2)}")
+        
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            response = await client.post(
+                LLM_API_URL,
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            
+            response_data = response.json()
+            content = response_data["choices"][0]["message"]["content"]
+            
+            if LOGGING_ENABLED:
+                logger.info(f"Received LLM response for '{current_item}' vs '{user_input}'")
+                logger.info(f"Raw LLM response: {json.dumps(response_data, indent=2)}")
+                logger.info(f"Raw LLM content: {content}")
+            
+            # Parse the JSON response
+            try:
+                # Extract and clean JSON from the LLM response
+                parsed_content = extract_json_from_llm_response(content, logger if LOGGING_ENABLED else None)
+                result = parsed_content.get("result", False)
+                description = parsed_content.get("description", "No explanation provided")
+                emoji = parsed_content.get("emoji", "❓")
+                
+                # Validate the response
+                if not isinstance(result, bool):
+                    result = False
+                
+                if len(description) > 100:  # Truncate if too long
+                    description = description[:97] + "..."
+                
+                if len(emoji) > 2:  # Take only the first emoji if multiple
+                    emoji = emoji[0]
+                
+                if LOGGING_ENABLED:
+                    logger.info(f"Parsed LLM response: result={result}, description='{description}', emoji='{emoji}'")
+                
+                return result, description, emoji
+                
+            except json.JSONDecodeError:
+                # Fallback if the response is not valid JSON
+                if LOGGING_ENABLED:
+                    logger.error(f"Failed to parse LLM response as JSON: {content}")
+                return False, "Could not determine the outcome", "❓"
+            except Exception as e:
+                # Handle any other exceptions that might occur during parsing
+                if LOGGING_ENABLED:
+                    logger.error(f"Error parsing LLM response: {str(e)}, content: {content}")
+                return False, "Error processing the response", "❓"
+    
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        # Log the error
+        error_msg = f"Error querying LLM: {str(e)}"
+        if LOGGING_ENABLED:
+            logger.error(error_msg)
+        else:
+            print(error_msg)
+        return False, "Error communicating with the judgment system", "❌"
+
+
+def extract_json_from_llm_response(content: str, logger=None) -> Dict[str, Any]:
+    """
+    Extract and clean JSON from various formats of LLM responses.
+    
+    This function handles different response formats and cleans the content
+    to extract valid JSON, including:
+    - Direct JSON responses
+    - JSON within markdown code blocks
+    - JSON with extra non-JSON characters (like "**" at the beginning)
+    - JSON with leading/trailing whitespace or newlines
+    
+    Args:
+        content: The raw content from the LLM response
+        logger: Optional logger for debugging
+        
+    Returns:
+        Parsed JSON as a dictionary
+        
+    Raises:
+        json.JSONDecodeError: If no valid JSON can be extracted
+    """
+    if not content or not content.strip():
+        if logger:
+            logger.warning("Empty content received from LLM")
+        raise json.JSONDecodeError("Empty content", "", 0)
+    
+    # First try: direct parsing (handles clean JSON responses)
+    try:
+        parsed_content = json.loads(content)
+        if logger:
+            logger.debug(f"Successfully parsed JSON directly: {parsed_content}")
+        return parsed_content
+    except json.JSONDecodeError:
+        if logger:
+            logger.debug(f"Direct JSON parsing failed, trying cleanup methods")
+    
+    # Second try: clean the content and try again
+    # Remove common non-JSON prefixes/suffixes
+    cleaned_content = content.strip()
+    
+    # Handle markdown code blocks
+    if "```json" in cleaned_content and "```" in cleaned_content:
+        start_idx = cleaned_content.find("```json") + 7
+        end_idx = cleaned_content.rfind("```")
+        if start_idx < end_idx:
+            cleaned_content = cleaned_content[start_idx:end_idx].strip()
+            if logger:
+                logger.debug(f"Extracted JSON from markdown code block: {cleaned_content}")
+    
+    # Handle other markdown code blocks without language specification
+    elif cleaned_content.startswith("```") and "```" in cleaned_content[3:]:
+        start_idx = cleaned_content.find("```") + 3
+        end_idx = cleaned_content.rfind("```")
+        if start_idx < end_idx:
+            cleaned_content = cleaned_content[start_idx:end_idx].strip()
+            if logger:
+                logger.debug(f"Extracted JSON from generic markdown code block: {cleaned_content}")
+    
+    # Try to find JSON object pattern in the content
+    import re
+    json_pattern = r'(\{[\s\S]*\})'
+    json_matches = re.search(json_pattern, cleaned_content)
+    
+    if json_matches:
+        potential_json = json_matches.group(1)
+        try:
+            parsed_content = json.loads(potential_json)
+            if logger:
+                logger.debug(f"Successfully extracted JSON using regex: {parsed_content}")
+            return parsed_content
+        except json.JSONDecodeError:
+            if logger:
+                logger.debug(f"Regex-extracted content is not valid JSON: {potential_json}")
+    
+    # Last attempt: try to parse the cleaned content directly
+    try:
+        # Remove any non-JSON characters at the beginning (like "**")
+        # Find the first '{' character
+        first_brace_idx = cleaned_content.find('{')
+        if first_brace_idx > 0:
+            if logger:
+                logger.debug(f"Removing {first_brace_idx} characters from the beginning: '{cleaned_content[:first_brace_idx]}'")
+            cleaned_content = cleaned_content[first_brace_idx:]
+        
+        parsed_content = json.loads(cleaned_content)
+        if logger:
+            logger.debug(f"Successfully parsed JSON after cleaning: {parsed_content}")
+        return parsed_content
+    except json.JSONDecodeError as e:
+        if logger:
+            logger.error(f"All JSON extraction methods failed: {str(e)}")
+        raise
+    
+
+async def determine_comparison(current_item: str, user_input: str) -> Dict[str, Any]:
+    """
+    Determine if user_input beats current_item and format the response.
+    
+    This is a wrapper function that normalizes the inputs, calls query_llm,
+    and formats the response as a dictionary. The underlying LLM query uses
+    structured output with JSON schema validation to ensure consistent formatting.
+    
+    Args:
+        current_item: The current item in the game
+        user_input: The user's input for what beats the current item
+        
+    Returns:
+        Dictionary with result, description, and emoji
+    """
+    # Normalize inputs (lowercase, strip whitespace)
+    current_item = current_item.lower().strip()
+    user_input = user_input.lower().strip()
+    
+    # Query the LLM
+    result, description, emoji = await query_llm(current_item, user_input)
+    
+    return {
+        "result": result,
+        "description": description,
+        "emoji": emoji
+    }
+
+
+async def generate_count_range_description(range_start: int, range_end: Optional[int] = None) -> Tuple[str, str]:
+    """
+    Generate a description and emoji for a count range using the LLM.
+    
+    This function sends a request to the LLM API to generate a creative description
+    and emoji for a specific count range. It's used to create engaging feedback
+    for users based on how frequently a comparison has been made.
+    
+    Args:
+        range_start: Start of the count range (inclusive)
+        range_end: End of the count range (inclusive, None for open-ended)
+        
+    Returns:
+        Tuple of (description: str, emoji: str)
+        
+    Raises:
+        ValueError: If the LLM_API_KEY environment variable is not set
+        httpx.RequestError: If there's an error communicating with the API
+        httpx.HTTPStatusError: If the API returns an error status code
+        json.JSONDecodeError: If the response cannot be parsed as JSON
+    """
+    if not LLM_API_KEY:
+        raise ValueError("LLM_API_KEY environment variable is not set")
+    
+    # Construct the range text
+    if range_end is None:
+        range_text = f"{range_start}+"
+    else:
+        range_text = f"{range_start}-{range_end}"
+    
+    # Construct the prompt
+    prompt = f"""
+Generate a creative and slightly humorous description and emoji for a comparison that has been used {range_text} times in a game.
+
+The description should:
+1. Be brief (under 20 words)
+2. Be engaging and fun
+3. Reflect the popularity/frequency of the comparison
+4. Not use the word "literally"
+
+The emoji should:
+1. Be a single emoji that represents the frequency/popularity
+2. Match the tone of the description
+3. Be visually distinct from other frequency ranges
+
+Your response will be automatically formatted as JSON with the following fields:
+- description: A brief, creative description for this usage frequency
+- emoji: A single relevant emoji that represents the frequency
+"""
+    
+    # Prepare the API request
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LLM_API_KEY}"
+    }
+    
+    # Define JSON schema for structured output
+    json_schema = {
+        "type": "object",
+        "properties": {
+            "description": {
+                "type": "string",
+                "description": "Brief, creative description for this usage frequency (<20 words)"
+            },
+            "emoji": {
+                "type": "string",
+                "description": "Single relevant emoji that represents the frequency"
+            }
+        },
+        "required": ["description", "emoji"],
+        "additionalProperties": False
+    }
+    
+    payload = {
+        "model": LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are a creative writer who generates engaging descriptions and emojis for game statistics."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.8,
+        "max_tokens": 100,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "count_range_description",
+                "strict": True,
+                "schema": json_schema
+            }
+        }
+    }
+    
+    try:
+        if LOGGING_ENABLED:
+            logger.info(f"Querying LLM for count range description: '{range_text}'")
+            logger.info(f"Request payload: {json.dumps(payload, indent=2)}")
+        
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            response = await client.post(
+                LLM_API_URL,
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            
+            response_data = response.json()
+            content = response_data["choices"][0]["message"]["content"]
+            
+            if LOGGING_ENABLED:
+                logger.info(f"Received LLM response for count range '{range_text}'")
+                logger.info(f"Raw LLM response: {json.dumps(response_data, indent=2)}")
+                logger.info(f"Raw LLM content: {content}")
+            
+            # Parse the JSON response
+            try:
+                # Extract and clean JSON from the LLM response
+                parsed_content = extract_json_from_llm_response(content, logger if LOGGING_ENABLED else None)
+                description = parsed_content.get("description", "This comparison is getting popular!")
+                emoji = parsed_content.get("emoji", "🔄")
+                
+                # Validate the response
+                if len(description) > 50:  # Truncate if too long
+                    description = description[:47] + "..."
+                
+                if len(emoji) > 2:  # Take only the first emoji if multiple
+                    emoji = emoji[0]
+                
+                if LOGGING_ENABLED:
+                    logger.info(f"Parsed LLM response: description='{description}', emoji='{emoji}'")
+                
+                return description, emoji
+                
+            except json.JSONDecodeError:
+                # Fallback if the response is not valid JSON
+                if LOGGING_ENABLED:
+                    logger.error(f"Failed to parse LLM response as JSON: {content}")
+                return "This comparison is getting popular!", "🔄"
+            except Exception as e:
+                # Handle any other exceptions that might occur during parsing
+                if LOGGING_ENABLED:
+                    logger.error(f"Error parsing LLM response: {str(e)}, content: {content}")
+                return "This comparison is getting popular!", "🔄"
+    
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        # Log the error
+        error_msg = f"Error querying LLM for count range: {str(e)}"
+        if LOGGING_ENABLED:
+            logger.error(error_msg)
+        else:
+            print(error_msg)
+        return "This comparison is getting popular!", "🔄"

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Beats Rock?</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>What Beats Rock?</h1>
+            <p class="subtitle">A game of creative comparisons</p>
+        </header>
+
+        <main>
+            <section id="game-area" class="hidden">
+                <div class="current-item">
+                    <h2>Current Item: <span id="current-item-text">rock</span> <span id="current-item-emoji">🪨</span></h2>
+                </div>
+                
+                <div class="input-area">
+                    <form id="comparison-form">
+                        <label for="user-input">What beats <span id="prompt-item">rock</span>?</label>
+                        <div class="input-group">
+                            <input type="text" id="user-input" placeholder="Enter your answer..." required>
+                            <button type="submit" id="submit-btn">Submit</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="result-area" class="hidden">
+                    <div class="result-card">
+                        <h3 id="result-title">Result</h3>
+                        <p id="result-description"></p>
+                        <div id="result-emoji" class="large-emoji"></div>
+                        <!-- Usage count container will be dynamically added here -->
+                    </div>
+                </div>
+
+                <div class="score-area">
+                    <h3>Score: <span id="score">0</span></h3>
+                </div>
+            </section>
+
+            <section id="start-screen">
+                <div class="start-card">
+                    <h2>Welcome to What Beats Rock?</h2>
+                    <p>A creative game where you suggest what beats the current item.</p>
+                    <p>Start with "rock" and see how far you can go!</p>
+                    <button id="start-game-btn" class="primary-btn">Start Game</button>
+                </div>
+            </section>
+
+            <section id="game-over-screen" class="hidden">
+                <div class="game-over-card">
+                    <h2>Game Over!</h2>
+                    <p>Your final score: <span id="final-score">0</span></p>
+                    <div id="high-score-message" class="hidden">
+                        <p class="highlight">New High Score!</p>
+                    </div>
+                    <h3>Your Item Chain:</h3>
+                    <div id="items-chain" class="items-chain"></div>
+                    <div class="game-over-buttons">
+                        <button id="play-again-btn" class="primary-btn">Play Again</button>
+                        <button id="report-btn" class="secondary-btn">Report Last Comparison</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <section id="history-section">
+            <h3>Game History</h3>
+            <div id="history-container" class="history-container"></div>
+        </section>
+
+        <section id="scoreboard-section" class="hidden">
+            <!-- This section is now moved to the stats modal as a tab -->
+        </section>
+
+        <footer>
+            <div class="footer-buttons">
+                <button id="view-stats-btn" class="secondary-btn">View Stats</button>
+            </div>
+            <div id="stats-modal" class="modal hidden">
+                <div class="modal-content">
+                    <span class="close-btn">&times;</span>
+                    <h2>Game Statistics</h2>
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="comparisons">Common Comparisons</button>
+                        <button class="tab-btn" data-tab="scoreboard">Scoreboard</button>
+                    </div>
+                    <div id="comparisons-tab" class="tab-content active">
+                        <table id="comparisons-table">
+                            <thead>
+                                <tr>
+                                    <th>Item 1</th>
+                                    <th>Item 2</th>
+                                    <th>Result</th>
+                                    <th>Count</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comparisons-body"></tbody>
+                        </table>
+                    </div>
+                    <div id="scoreboard-tab" class="tab-content">
+                        <div class="scoreboard-header">
+                            <div class="scoreboard-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">Total Scores:</span>
+                                    <span id="total-scores" class="stat-value">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Highest Score:</span>
+                                    <span id="highest-score" class="stat-value">0</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Average Score:</span>
+                                    <span id="average-score" class="stat-value">0</span>
+                                </div>
+                            </div>
+                            <div class="scoreboard-filters">
+                                <button type="button" id="clear-all-filters" class="clear-all-filters-btn" title="Clear all filters">&times;</button>
+                                <div class="filter-group">
+                                    <label for="sort-by">Sort By:</label>
+                                    <div class="filter-input-container">
+                                        <select id="sort-by">
+                                            <option value="score">Score</option>
+                                            <option value="created_at">Date</option>
+                                        </select>
+                                    </div>
+                                    <div class="filter-input-container">
+                                        <select id="sort-direction">
+                                            <option value="desc">Highest First</option>
+                                            <option value="asc">Lowest First</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="filter-group">
+                                    <label for="min-score">Score:</label>
+                                    <div class="filter-input-container">
+                                        <input type="number" id="min-score" placeholder="Min" min="0">
+                                    </div>
+                                    <span>-</span>
+                                    <div class="filter-input-container">
+                                        <input type="number" id="max-score" placeholder="Max" min="0">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="scoreboard-table-container">
+                            <table id="scoreboard-table">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Score</th>
+                                        <th>Items Chain</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scoreboard-body"></tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="scoreboard-pagination">
+                            <button id="prev-page-btn" class="pagination-btn" disabled>&lt; Previous</button>
+                            <span id="page-info">Page 1 of 1</span>
+                            <button id="next-page-btn" class="pagination-btn" disabled>Next &gt;</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+        
+        <!-- Report Modal -->
+        <div id="report-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-btn" id="close-report-modal">&times;</span>
+                <h2>Report Disputed Comparison</h2>
+                <p>If you believe your answer should have been accepted, you can submit a report for review.</p>
+                
+                <div id="report-details" class="report-details">
+                    <div class="report-item">
+                        <span class="label">Your answer:</span>
+                        <span id="report-user-input" class="value"></span>
+                    </div>
+                    <div class="report-item">
+                        <span class="label">Current item:</span>
+                        <span id="report-current-item" class="value"></span>
+                    </div>
+                </div>
+                
+                <form id="report-form">
+                    <div class="form-group">
+                        <label for="report-reason">Reason (optional):</label>
+                        <textarea id="report-reason" placeholder="Why do you think your answer should have been accepted?"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" id="cancel-report-btn" class="secondary-btn">Cancel</button>
+                        <button type="submit" id="submit-report-btn" class="primary-btn">Submit Report</button>
+                    </div>
+                </form>
+                
+                <div id="report-success" class="hidden">
+                    <p class="success-message">Thank you for your report! Our team will review it soon.</p>
+                    <button type="button" id="close-success-btn" class="primary-btn">Close</button>
+                </div>
+                
+                <div id="report-error" class="hidden">
+                    <p class="error-message">There was an error submitting your report. Please try again.</p>
+                    <button type="button" id="retry-report-btn" class="primary-btn">Try Again</button>
+                </div>
+            </div>
+        </div>
+        
+        
+        <!-- Edit Comparison Modal -->
+        <div id="edit-comparison-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-btn" id="close-edit-comparison-modal">&times;</span>
+                <h2>Edit Comparison</h2>
+                
+                <form id="edit-comparison-form">
+                    <div class="form-group">
+                        <label for="edit-item1">Item 1:</label>
+                        <input type="text" id="edit-item1" readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-item2">Item 2:</label>
+                        <input type="text" id="edit-item2" readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Result:</label>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="result" id="item1-wins" value="item1">
+                                Item 1 beats Item 2
+                            </label>
+                            <label>
+                                <input type="radio" name="result" id="item2-wins" value="item2">
+                                Item 2 beats Item 1
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-description">Description:</label>
+                        <textarea id="edit-description" placeholder="Explain why one item beats the other"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-emoji">Emoji:</label>
+                        <input type="text" id="edit-emoji" placeholder="Enter a relevant emoji">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="cancel-edit-btn" class="secondary-btn">Cancel</button>
+                        <button type="submit" id="save-comparison-btn" class="primary-btn">Save Changes</button>
+                    </div>
+                </form>
+                
+                <div id="edit-success" class="hidden">
+                    <p class="success-message">Comparison updated successfully!</p>
+                    <button type="button" id="close-edit-success-btn" class="primary-btn">Close</button>
+                </div>
+                
+                <div id="edit-error" class="hidden">
+                    <p class="error-message">There was an error updating the comparison. Please try again.</p>
+                    <button type="button" id="retry-edit-btn" class="primary-btn">Try Again</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
