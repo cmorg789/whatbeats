@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Get project root directory (3 levels up from this file)
+PROJECT_ROOT = pathlib.Path(__file__).parent.parent.parent.absolute()
+
 # LLM API settings
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_API_URL = os.getenv("LLM_API_URL", "https://openrouter.ai/api/v1/chat/completions")
@@ -20,7 +23,7 @@ TIMEOUT = 30.0
 # Logging configuration
 LOGGING_ENABLED = os.getenv("LLM_LOGGING_ENABLED", "true").lower() == "true"
 LOG_LEVEL = os.getenv("LLM_LOG_LEVEL", "INFO")
-LOG_DIR = os.getenv("LLM_LOG_DIR", "logs")
+LOG_DIR = os.path.join(PROJECT_ROOT, os.getenv("LLM_LOG_DIR", "logs"))
 LOG_FILE = os.getenv("LLM_LOG_FILE", "llm_responses.log")
 
 # Set up logger
@@ -179,8 +182,8 @@ Your response will be automatically formatted as JSON with the following fields:
                 if not isinstance(result, bool):
                     result = False
                 
-                if len(description) > 100:  # Truncate if too long
-                    description = description[:97] + "..."
+                # Remove the 100-character limit truncation to allow full descriptions
+                # The LLM is already instructed to keep descriptions brief (<30 words)
                 
                 if len(emoji) > 2:  # Take only the first emoji if multiple
                     emoji = emoji[0]
@@ -454,8 +457,8 @@ Your response will be automatically formatted as JSON with the following fields:
                 emoji = parsed_content.get("emoji", "🔄")
                 
                 # Validate the response
-                if len(description) > 50:  # Truncate if too long
-                    description = description[:47] + "..."
+                # Remove the 50-character limit truncation to allow full descriptions
+                # The LLM is already instructed to keep descriptions brief (<20 words)
                 
                 if len(emoji) > 2:  # Take only the first emoji if multiple
                     emoji = emoji[0]
