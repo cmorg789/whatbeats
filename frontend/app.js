@@ -115,6 +115,18 @@ function initApp() {
     elements.viewStatsBtn.addEventListener('click', () => openStatsModal('comparisons'));
     elements.closeModalBtn.addEventListener('click', closeStatsModal);
     
+    // Add client-side validation for user input
+    elements.userInput.addEventListener('input', validateUserInput);
+    
+    // Add client-side validation for user input
+    elements.userInput.addEventListener('input', validateUserInput);
+    
+    // Add client-side validation for user input
+    elements.userInput.addEventListener('input', validateUserInput);
+    
+    // Add client-side validation for user input
+    elements.userInput.addEventListener('input', validateUserInput);
+    
     // Scoreboard functionality
     elements.prevPageBtn.addEventListener('click', () => navigateScoreboardPage(-1));
     elements.nextPageBtn.addEventListener('click', () => navigateScoreboardPage(1));
@@ -243,6 +255,13 @@ async function handleSubmit(event) {
     
     // Don't process empty input
     if (!userInput) {
+        return;
+    }
+    
+    // Client-side validation before submission
+    const validationResult = validateUserInputBeforeSubmit(userInput);
+    if (!validationResult.valid) {
+        showError(validationResult.message);
         return;
     }
     
@@ -410,10 +429,9 @@ function showResult(response) {
         }
     }
     
-    // Set description and emoji
-    elements.resultDescription.textContent = response.description;
-    
-    elements.resultEmoji.textContent = response.emoji;
+    // Set description and emoji using safe methods
+    utils.setTextContent(elements.resultDescription, response.description);
+    utils.setTextContent(elements.resultEmoji, response.emoji);
     
     // Add count information and range description if available
     if (response.count) {
@@ -440,17 +458,21 @@ function showResult(response) {
             currentItemElement.parentNode.insertBefore(usageCountContainer, currentItemElement.nextSibling);
         }
         
-        // Clear previous content
-        usageCountContainer.innerHTML = '';
+        // Clear previous content - use safer method
+        while (usageCountContainer.firstChild) {
+            usageCountContainer.removeChild(usageCountContainer.firstChild);
+        }
         
         // Create a wrapper div for inline display
         const inlineWrapper = document.createElement('div');
-        inlineWrapper.style.textAlign = 'center';
+        inlineWrapper.className = 'text-center';
         
         // Create count display
-        const countDisplay = document.createElement('span');
-        countDisplay.className = 'usage-count-display';
-        countDisplay.textContent = `Used ${response.count} time${response.count !== 1 ? 's' : ''}`;
+        const countDisplay = utils.createElement(
+            'span',
+            `Used ${response.count} time${response.count !== 1 ? 's' : ''}`,
+            'usage-count-display'
+        );
         inlineWrapper.appendChild(countDisplay);
         
         // Add range description and emoji if available
@@ -458,13 +480,9 @@ function showResult(response) {
             const rangeDescription = document.createElement('span');
             rangeDescription.className = 'usage-range-description';
             
-            const rangeEmoji = document.createElement('span');
-            rangeEmoji.className = 'usage-range-emoji';
-            rangeEmoji.textContent = response.count_range_emoji;
+            const rangeEmoji = utils.createElement('span', response.count_range_emoji, 'usage-range-emoji');
             
-            const rangeText = document.createElement('span');
-            rangeText.className = 'usage-range-text';
-            rangeText.textContent = response.count_range_description;
+            const rangeText = utils.createElement('span', response.count_range_description, 'usage-range-text');
             
             rangeDescription.appendChild(rangeEmoji);
             rangeDescription.appendChild(rangeText);
@@ -486,10 +504,11 @@ function showResult(response) {
  * Update the game UI with current state
  */
 function updateGameUI() {
-    elements.currentItemText.textContent = gameState.currentItem;
-    elements.currentItemEmoji.textContent = gameState.currentEmoji;
-    elements.promptItem.textContent = gameState.currentItem;
-    elements.scoreDisplay.textContent = gameState.score;
+    // Use safe DOM manipulation methods
+    utils.setTextContent(elements.currentItemText, gameState.currentItem);
+    utils.setTextContent(elements.currentItemEmoji, gameState.currentEmoji);
+    utils.setTextContent(elements.promptItem, gameState.currentItem);
+    utils.setTextContent(elements.scoreDisplay, gameState.score);
 }
 
 /**
@@ -499,36 +518,26 @@ function updateHistoryDisplay() {
     elements.historyContainer.innerHTML = '';
     
     if (gameState.history.length === 0) {
-        const emptyMessage = document.createElement('div');
-        emptyMessage.className = 'history-item';
-        emptyMessage.textContent = 'No history yet. Start playing!';
+        const emptyMessage = utils.createElement('div', 'No history yet. Start playing!', 'history-item');
         elements.historyContainer.appendChild(emptyMessage);
         return;
     }
     
     gameState.history.forEach(item => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
+        const historyItem = utils.createElement('div', null, 'history-item');
         
-        const emoji = document.createElement('span');
-        emoji.className = 'history-emoji';
-        emoji.textContent = item.emoji;
+        const emoji = utils.createElement('span', item.emoji, 'history-emoji');
         
         const text = document.createElement('div');
         text.className = 'history-text';
         
-        const comparison = document.createElement('div');
-        comparison.textContent = `${item.userInput} vs ${item.currentItem}`;
+        const comparison = utils.createElement('div', `${utils.sanitizeText(item.userInput)} vs ${utils.sanitizeText(item.currentItem)}`);
         
-        const result = document.createElement('div');
-        result.className = 'history-result ' + (item.result ? 'success' : 'error');
-        result.textContent = item.description;
+        const result = utils.createElement('div', item.description, 'history-result ' + (item.result ? 'success' : 'error'));
         
         // Add count information if available
         if (item.count && item.count > 1) {
-            const countSpan = document.createElement('span');
-            countSpan.className = 'usage-count';
-            countSpan.textContent = `Used ${item.count} times`;
+            const countSpan = utils.createElement('span', `Used ${item.count} times`, 'usage-count');
             result.appendChild(countSpan);
             
             // We don't add the range description in the history items to keep it clean
@@ -549,17 +558,17 @@ function updateHistoryDisplay() {
  * @param {Array} itemsChain - Array of items in the chain
  */
 function displayItemsChain(itemsChain) {
-    elements.itemsChain.innerHTML = '';
+    // Clear the items chain using a safer method
+    while (elements.itemsChain.firstChild) {
+        elements.itemsChain.removeChild(elements.itemsChain.firstChild);
+    }
     
     itemsChain.forEach((item, index) => {
-        const chainItem = document.createElement('div');
-        chainItem.className = 'chain-item';
+        const chainItem = utils.createElement('div', null, 'chain-item');
         
-        const itemText = document.createElement('span');
-        itemText.textContent = item;
+        const itemText = utils.createElement('span', utils.sanitizeText(item));
         
-        const itemEmoji = document.createElement('span');
-        itemEmoji.textContent = getEmojiForItem(item);
+        const itemEmoji = utils.createElement('span', getEmojiForItem(item));
         
         chainItem.appendChild(itemText);
         chainItem.appendChild(itemEmoji);
@@ -568,9 +577,7 @@ function displayItemsChain(itemsChain) {
         
         // Add arrow between items
         if (index < itemsChain.length - 1) {
-            const arrow = document.createElement('span');
-            arrow.className = 'chain-arrow';
-            arrow.textContent = '→';
+            const arrow = utils.createElement('span', '→', 'chain-arrow');
             elements.itemsChain.appendChild(arrow);
         }
     });
@@ -620,10 +627,8 @@ function displayComparisonStats(comparisons) {
     
     if (comparisons.length === 0) {
         const row = document.createElement('tr');
-        const cell = document.createElement('td');
+        const cell = utils.createElement('td', 'No comparisons yet.', 'text-center');
         cell.colSpan = 4;
-        cell.textContent = 'No comparisons yet.';
-        cell.style.textAlign = 'center';
         row.appendChild(cell);
         elements.comparisonsBody.appendChild(row);
         return;
@@ -632,19 +637,15 @@ function displayComparisonStats(comparisons) {
     comparisons.forEach(comp => {
         const row = document.createElement('tr');
         
-        const item1Cell = document.createElement('td');
-        item1Cell.textContent = comp.item1;
+        const item1Cell = utils.createElement('td', utils.sanitizeText(comp.item1));
         
-        const item2Cell = document.createElement('td');
-        item2Cell.textContent = comp.item2;
+        const item2Cell = utils.createElement('td', utils.sanitizeText(comp.item2));
         
-        const resultCell = document.createElement('td');
-        resultCell.textContent = comp.item2_wins ? 
-            `${comp.item2} beats ${comp.item1}` : 
-            `${comp.item1} beats ${comp.item2}`;
+        const resultCell = utils.createElement('td', comp.item2_wins ?
+            `${utils.sanitizeText(comp.item2)} beats ${utils.sanitizeText(comp.item1)}` :
+            `${utils.sanitizeText(comp.item1)} beats ${utils.sanitizeText(comp.item2)}`);
         
-        const countCell = document.createElement('td');
-        countCell.textContent = comp.count;
+        const countCell = utils.createElement('td', comp.count.toString());
         
         row.appendChild(item1Cell);
         row.appendChild(item2Cell);
@@ -763,10 +764,10 @@ function showItemReuseError(message, item) {
     console.error(message);
     
     // Show error in the result area instead of an alert for better UX
-    elements.resultTitle.textContent = 'Item Already Used!';
+    utils.setTextContent(elements.resultTitle, 'Item Already Used!');
     elements.resultTitle.className = 'error';
-    elements.resultDescription.textContent = message;
-    elements.resultEmoji.textContent = '⚠️';
+    utils.setTextContent(elements.resultDescription, message);
+    utils.setTextContent(elements.resultEmoji, '⚠️');
     elements.resultArea.classList.remove('hidden');
     
     // Highlight the item in the used items display
@@ -805,8 +806,7 @@ function updateUsedItemsDisplay() {
         usedItemsContainer.className = 'used-items-container';
         
         // Add a heading
-        const heading = document.createElement('h4');
-        heading.textContent = 'Used Items:';
+        const heading = utils.createElement('h4', 'Used Items:');
         usedItemsContainer.appendChild(heading);
         
         // Create the items list
@@ -822,20 +822,22 @@ function updateUsedItemsDisplay() {
     
     // Get the items list
     const itemsList = document.getElementById('used-items-list');
-    itemsList.innerHTML = '';
+    // Clear the items list using a safer method
+    while (itemsList.firstChild) {
+        itemsList.removeChild(itemsList.firstChild);
+    }
     
     // If there are no used items, show a message
     if (gameState.usedItems.length === 0) {
-        itemsList.innerHTML = '<span class="no-items">No items used yet</span>';
+        const noItemsSpan = utils.createElement('span', 'No items used yet', 'no-items');
+        itemsList.appendChild(noItemsSpan);
         return;
     }
     
     // Add each used item to the list
     gameState.usedItems.forEach(item => {
-        const itemElement = document.createElement('span');
-        itemElement.className = 'used-item';
+        const itemElement = utils.createElement('span', utils.sanitizeText(item), 'used-item');
         itemElement.dataset.item = item;
-        itemElement.textContent = item;
         itemsList.appendChild(itemElement);
     });
 }
@@ -894,8 +896,8 @@ function getEmojiForItem(item) {
 function openReportModal() {
     // Populate the report form with the last comparison
     if (gameState.lastComparison) {
-        elements.reportUserInput.textContent = gameState.lastComparison.userInput;
-        elements.reportCurrentItem.textContent = gameState.lastComparison.currentItem;
+        utils.setTextContent(elements.reportUserInput, gameState.lastComparison.userInput);
+        utils.setTextContent(elements.reportCurrentItem, gameState.lastComparison.currentItem);
     }
     
     // Show the form, hide success/error messages
@@ -1062,7 +1064,7 @@ function displayScoreboardData(highScores) {
         const cell = document.createElement('td');
         cell.colSpan = 4;
         cell.textContent = 'No scores found matching your criteria.';
-        cell.style.textAlign = 'center';
+        cell.className = 'text-center';
         row.appendChild(cell);
         elements.scoreboardBody.appendChild(row);
         return;
@@ -1287,5 +1289,181 @@ function debounce(func, wait) {
     };
 }
 
+/**
+ * Validate user input as they type
+ * Provides real-time feedback on input validity
+ */
+function validateUserInput(event) {
+    const input = event.target;
+    const value = input.value.trim();
+    
+    // Clear previous validation messages
+    const existingErrorMsg = document.getElementById('input-validation-error');
+    if (existingErrorMsg) {
+        existingErrorMsg.remove();
+    }
+    
+    // Skip validation for empty input
+    if (!value) {
+        input.classList.remove('invalid-input');
+        return;
+    }
+    
+    // Validate input length
+    if (value.length > 50) {
+        input.classList.add('invalid-input');
+        showInputValidationError(input, 'Input too long (max 50 characters)');
+        return;
+    }
+    
+    // Validate input characters
+    if (!/^[a-zA-Z0-9\s.,!?-]+$/.test(value)) {
+        input.classList.add('invalid-input');
+        showInputValidationError(input, 'Input contains invalid characters');
+        return;
+    }
+    
+    // Input is valid
+    input.classList.remove('invalid-input');
+}
+
+/**
+ * Show validation error message below input field
+ */
+function showInputValidationError(inputElement, message) {
+    // Create error message element if it doesn't exist
+    let errorMsg = document.getElementById('input-validation-error');
+    if (!errorMsg) {
+        errorMsg = document.createElement('div');
+        errorMsg.id = 'input-validation-error';
+        errorMsg.className = 'validation-error';
+        inputElement.parentNode.insertBefore(errorMsg, inputElement.nextSibling);
+    }
+    
+    // Set error message
+    errorMsg.textContent = message;
+}
+
+/**
+ * Validate user input before form submission
+ * Returns an object with validation result and error message
+ */
+function validateUserInputBeforeSubmit(userInput) {
+    // Validate input length
+    if (userInput.length > 50) {
+        return {
+            valid: false,
+            message: 'Input too long (max 50 characters)'
+        };
+    }
+    
+    // Validate input characters
+    if (!/^[a-zA-Z0-9\s.,!?-]+$/.test(userInput)) {
+        return {
+            valid: false,
+            message: 'Input contains invalid characters'
+        };
+    }
+    
+    // Check for potentially harmful inputs (simple XSS prevention)
+    if (/<script|javascript:|onerror=|onclick=|alert\(|eval\(|document\.cookie/i.test(userInput)) {
+        return {
+            valid: false,
+            message: 'Input contains potentially harmful content'
+        };
+    }
+    
+    return { valid: true };
+}
+
+/**
+ * Validate user input as they type
+ * Provides real-time feedback on input validity
+ */
+function validateUserInput(event) {
+    const input = event.target;
+    const value = input.value.trim();
+    
+    // Clear previous validation messages
+    const existingErrorMsg = document.getElementById('input-validation-error');
+    if (existingErrorMsg) {
+        existingErrorMsg.remove();
+    }
+    
+    // Skip validation for empty input
+    if (!value) {
+        input.classList.remove('invalid-input');
+        return;
+    }
+    
+    // Validate input length
+    if (value.length > 50) {
+        input.classList.add('invalid-input');
+        showInputValidationError(input, 'Input too long (max 50 characters)');
+        return;
+    }
+    
+    // Validate input characters
+    if (!/^[a-zA-Z0-9\s.,!?-]+$/.test(value)) {
+        input.classList.add('invalid-input');
+        showInputValidationError(input, 'Input contains invalid characters');
+        return;
+    }
+    
+    // Input is valid
+    input.classList.remove('invalid-input');
+}
+
+/**
+ * Show validation error message below input field
+ */
+function showInputValidationError(inputElement, message) {
+    // Create error message element if it doesn't exist
+    let errorMsg = document.getElementById('input-validation-error');
+    if (!errorMsg) {
+        errorMsg = document.createElement('div');
+        errorMsg.id = 'input-validation-error';
+        errorMsg.className = 'validation-error';
+        inputElement.parentNode.insertBefore(errorMsg, inputElement.nextSibling);
+    }
+    
+    // Set error message
+    errorMsg.textContent = message;
+}
+
+/**
+ * Validate user input before form submission
+ * Returns an object with validation result and error message
+ */
+function validateUserInputBeforeSubmit(userInput) {
+    // Validate input length
+    if (userInput.length > 50) {
+        return {
+            valid: false,
+            message: 'Input too long (max 50 characters)'
+        };
+    }
+    
+    // Validate input characters
+    if (!/^[a-zA-Z0-9\s.,!?-]+$/.test(userInput)) {
+        return {
+            valid: false,
+            message: 'Input contains invalid characters'
+        };
+    }
+    
+    // Check for potentially harmful inputs (simple XSS prevention)
+    if (/<script|javascript:|onerror=|onclick=|alert\(|eval\(|document\.cookie/i.test(userInput)) {
+        return {
+            valid: false,
+            message: 'Input contains potentially harmful content'
+        };
+    }
+    
+    return { valid: true };
+}
+
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', initApp);
+
+// Validation styles are now in the external CSS file

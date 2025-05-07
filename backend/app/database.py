@@ -1,6 +1,7 @@
 import os
+import re
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -36,6 +37,39 @@ reports_collection.create_index("created_at")
 count_ranges_collection.create_index([("range_start", 1)], unique=True)
 
 
+# Database sanitization functions
+def sanitize_db_input(value: Any) -> Any:
+    """
+    Sanitize input before using in database operations.
+    
+    This function removes MongoDB operator characters and other potentially
+    dangerous characters from string inputs to prevent NoSQL injection attacks.
+    
+    Args:
+        value: The value to sanitize (any type)
+        
+    Returns:
+        Sanitized value (same type as input)
+    """
+    if isinstance(value, str):
+        # Remove MongoDB operator characters
+        sanitized = value.replace('$', '')
+        
+        # Remove dots which can be used for field traversal
+        sanitized = sanitized.replace('.', '')
+        
+        return sanitized
+    elif isinstance(value, dict):
+        # Recursively sanitize dictionary values
+        return {k: sanitize_db_input(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        # Recursively sanitize list items
+        return [sanitize_db_input(item) for item in value]
+    else:
+        # Return non-string values unchanged
+        return value
+
+
 # Comparison operations
 async def get_comparison(item1: str, item2: str) -> Optional[Dict]:
     """
@@ -52,7 +86,11 @@ async def get_comparison(item1: str, item2: str) -> Optional[Dict]:
     Returns:
         The comparison document if found, None otherwise
     """
-    return comparisons_collection.find_one({"item1": item1, "item2": item2})
+    # Sanitize inputs
+    safe_item1 = sanitize_db_input(item1)
+    safe_item2 = sanitize_db_input(item2)
+    
+    return comparisons_collection.find_one({"item1": safe_item1, "item2": safe_item2})
 
 
 async def create_comparison(
@@ -81,14 +119,20 @@ async def create_comparison(
     Returns:
         The newly created comparison document
     """
+    # Sanitize inputs
+    safe_item1 = sanitize_db_input(item1)
+    safe_item2 = sanitize_db_input(item2)
+    safe_description = sanitize_db_input(description)
+    safe_emoji = sanitize_db_input(emoji)
+    
     now = datetime.utcnow()
     comparison = {
-        "item1": item1,
-        "item2": item2,
+        "item1": safe_item1,
+        "item2": safe_item2,
         "item1_wins": item1_wins,
         "item2_wins": item2_wins,
-        "description": description,
-        "emoji": emoji,
+        "description": safe_description,
+        "emoji": safe_emoji,
         "count": 1,
         "created_at": now,
         "updated_at": now
@@ -111,8 +155,12 @@ async def increment_comparison_count(item1: str, item2: str) -> None:
         item1: The first item in the comparison
         item2: The second item in the comparison
     """
+    # Sanitize inputs
+    safe_item1 = sanitize_db_input(item1)
+    safe_item2 = sanitize_db_input(item2)
+    
     comparisons_collection.update_one(
-        {"item1": item1, "item2": item2},
+        {"item1": safe_item1, "item2": safe_item2},
         {
             "$inc": {"count": 1},
             "$set": {"updated_at": datetime.utcnow()}
@@ -143,7 +191,9 @@ async def create_game_session() -> Dict:
 
 async def get_game_session(session_id: str) -> Optional[Dict]:
     """Get a game session by its ID."""
-    return game_sessions_collection.find_one({"session_id": session_id})
+    # Sanitize input
+    safe_session_id = sanitize_db_input(session_id)
+    return game_sessions_collection.find_one({"session_id": safe_session_id})
 
 
 async def update_game_session(
@@ -186,6 +236,38 @@ async def end_game_session(session_id: str) -> Optional[Dict]:
     
     if result.modified_count:
         return await get_game_session(session_id)
+    return None
+
+
+async def update_session_owner(session_id: str, owner_ip: str) -> Optional[Dict]:
+    """
+    Update a game session with the owner's IP address.
+    
+    This function is used for session validation to prevent unauthorized access.
+    
+    Args:
+        session_id: The unique session ID
+        owner_ip: The IP address of the session owner
+        
+    Returns:
+        The updated session document if found, None otherwise
+    """
+    # Sanitize inputs
+    safe_session_id = sanitize_db_input(session_id)
+    safe_owner_ip = sanitize_db_input(owner_ip)
+    
+    result = game_sessions_collection.update_one(
+        {"session_id": safe_session_id},
+        {
+            "$set": {
+                "owner_ip": safe_owner_ip,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    if result.modified_count:
+        return await get_game_session(safe_session_id)
     return None
 
 
@@ -294,16 +376,23 @@ async def create_report(
     Returns:
         The newly created report document
     """
+    # Sanitize inputs
+    safe_session_id = sanitize_db_input(session_id)
+    safe_item1 = sanitize_db_input(item1)
+    safe_item2 = sanitize_db_input(item2)
+    safe_comparison_id = sanitize_db_input(comparison_id) if comparison_id else None
+    safe_reason = sanitize_db_input(reason) if reason else None
+    
     report_id = str(ObjectId())
     now = datetime.utcnow()
     
     report = {
         "report_id": report_id,
-        "session_id": session_id,
-        "comparison_id": comparison_id,
-        "item1": item1,
-        "item2": item2,
-        "reason": reason,
+        "session_id": safe_session_id,
+        "comparison_id": safe_comparison_id,
+        "item1": safe_item1,
+        "item2": safe_item2,
+        "reason": safe_reason,
         "status": "pending",
         "created_at": now,
         "updated_at": now

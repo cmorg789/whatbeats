@@ -93,7 +93,7 @@ function initApp() {
 function switchTab(tabName) {
     // Hide all tab content
     document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.style.display = 'none';
+        tab.classList.remove('active');
     });
     
     // Remove active class from all tab buttons
@@ -102,7 +102,7 @@ function switchTab(tabName) {
     });
     
     // Show the selected tab content
-    document.getElementById(`${tabName}-tab`).style.display = 'block';
+    document.getElementById(`${tabName}-tab`).classList.add('active');
     
     // Add active class to the clicked button
     document.querySelector(`.tab-btn[data-tab="${tabName}"]`).classList.add('active');
@@ -114,7 +114,7 @@ function switchTab(tabName) {
 async function loadAdminReports() {
     try {
         // Show loading state
-        elements.reportsBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Loading reports...</td></tr>';
+        elements.reportsBody.innerHTML = '<tr><td colspan="7" class="loading-message">Loading reports...</td></tr>';
         
         // Prepare options for API call
         const options = {
@@ -140,7 +140,7 @@ async function loadAdminReports() {
         
     } catch (error) {
         console.error('Error loading admin reports:', error);
-        elements.reportsBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--error-color);">Error loading reports: ${error.message}</td></tr>`;
+        elements.reportsBody.innerHTML = `<tr><td colspan="7" class="error-message-cell">Error loading reports: ${error.message}</td></tr>`;
     }
 }
 
@@ -152,7 +152,7 @@ function displayAdminReports(reports) {
     elements.reportsBody.innerHTML = '';
     
     if (reports.length === 0) {
-        elements.reportsBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No reports found.</td></tr>';
+        elements.reportsBody.innerHTML = '<tr><td colspan="7" class="empty-message-cell">No reports found.</td></tr>';
         return;
     }
     

@@ -3,7 +3,9 @@ import json
 import httpx
 import logging
 import pathlib
-from typing import Dict, Any, Tuple, Optional
+import re
+import copy
+from typing import Dict, Any, Tuple, Optional, Union
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -56,6 +58,73 @@ else:
     logger.addHandler(logging.NullHandler())
 
 
+def sanitize_for_prompt(text: str) -> str:
+    """
+    Sanitize text before including it in an LLM prompt.
+    
+    This function removes characters that could interfere with prompt structure
+    or enable prompt injection attacks.
+    
+    Args:
+        text: The text to sanitize
+        
+    Returns:
+        Sanitized text safe for inclusion in prompts
+    """
+    # Normalize input
+    text = text.lower().strip()
+    
+    # Remove characters that could interfere with prompt structure
+    sanitized = re.sub(r'["`\'\\]', '', text)
+    
+    # Remove any potential XML/HTML-like tags that could be used for prompt injection
+    sanitized = re.sub(r'<[^>]*>', '', sanitized)
+    
+    return sanitized
+
+def sanitize_for_logs(data: Any) -> Any:
+    """
+    Sanitize data before logging to prevent sensitive information exposure.
+    
+    This function creates a deep copy of the data and removes or redacts sensitive
+    information like API keys, authorization headers, and other potentially
+    sensitive fields.
+    
+    Args:
+        data: The data to sanitize (any type)
+        
+    Returns:
+        Sanitized copy of the data (same type as input)
+    """
+    # Return non-dict/list values unchanged
+    if not isinstance(data, (dict, list)):
+        return data
+    
+    # Create a deep copy to avoid modifying the original
+    sanitized = copy.deepcopy(data)
+    
+    if isinstance(sanitized, dict):
+        # Redact sensitive fields in dictionaries
+        for key in sanitized:
+            # Redact API keys and authorization headers
+            if key.lower() in ('authorization', 'api_key', 'api-key', 'apikey', 'key', 'token', 'secret'):
+                if isinstance(sanitized[key], str):
+                    # Keep the first few characters and redact the rest
+                    if len(sanitized[key]) > 8:
+                        sanitized[key] = sanitized[key][:4] + '****' + sanitized[key][-4:]
+                    else:
+                        sanitized[key] = '********'
+            # Recursively sanitize nested structures
+            elif isinstance(sanitized[key], (dict, list)):
+                sanitized[key] = sanitize_for_logs(sanitized[key])
+    
+    elif isinstance(sanitized, list):
+        # Recursively sanitize list items
+        for i, item in enumerate(sanitized):
+            sanitized[i] = sanitize_for_logs(item)
+    
+    return sanitized
+
 async def query_llm(current_item: str, user_input: str) -> Tuple[bool, str, str]:
     """
     Query the LLM to determine if user_input beats current_item.
@@ -82,12 +151,17 @@ async def query_llm(current_item: str, user_input: str) -> Tuple[bool, str, str]
     if not LLM_API_KEY:
         raise ValueError("LLM_API_KEY environment variable is not set")
     
-    # Construct the prompt
+    # Sanitize inputs before including in prompt
+    safe_current_item = sanitize_for_prompt(current_item)
+    safe_user_input = sanitize_for_prompt(user_input)
+    
+    # Construct the prompt with clear boundaries using XML-like tags
     prompt = f"""
 You are judging a game of "What Beats What" where items compete based on their real-world properties and interactions.
+
 Given the following comparison:
-- Current item: {current_item}
-- User's suggestion: {user_input}
+<current_item>{safe_current_item}</current_item>
+<user_input>{safe_user_input}</user_input>
 
 Determine if the user's suggestion beats the current item by considering:
 1. Physical properties (e.g., state of matter, temperature, hardness, sharpness)
@@ -100,7 +174,7 @@ Be creative but logical - focus on realistic ways these items would interact if 
 
 Your response will be automatically formatted as JSON with the following fields:
 - result: A boolean indicating if the user's suggestion beats the current item
-- description: A brief explanation (<30 words) of why the result is true or false. Make it creative and slightly goofy. Don't use the word "literally" 
+- description: A brief explanation (<30 words) of why the result is true or false. Make it creative and slightly goofy. Don't use the word "literally"
 - emoji: A single relevant emoji that represents the outcome. Do NOT use the cross mark emoji except on failures (❌)!
 """
     
@@ -152,7 +226,9 @@ Your response will be automatically formatted as JSON with the following fields:
     try:
         if LOGGING_ENABLED:
             logger.info(f"Querying LLM for comparison: '{current_item}' vs '{user_input}'")
-            logger.info(f"Request payload: {json.dumps(payload, indent=2)}")
+            # Sanitize the payload before logging
+            sanitized_payload = sanitize_for_logs(payload)
+            logger.info(f"Request payload: {json.dumps(sanitized_payload, indent=2)}")
         
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             response = await client.post(
@@ -167,7 +243,9 @@ Your response will be automatically formatted as JSON with the following fields:
             
             if LOGGING_ENABLED:
                 logger.info(f"Received LLM response for '{current_item}' vs '{user_input}'")
-                logger.info(f"Raw LLM response: {json.dumps(response_data, indent=2)}")
+                # Sanitize the response data before logging
+                sanitized_response = sanitize_for_logs(response_data)
+                logger.info(f"Raw LLM response: {json.dumps(sanitized_response, indent=2)}")
                 logger.info(f"Raw LLM content: {content}")
             
             # Parse the JSON response
@@ -367,9 +445,12 @@ async def generate_count_range_description(range_start: int, range_end: Optional
     else:
         range_text = f"{range_start}-{range_end}"
     
-    # Construct the prompt
+    # Sanitize the range text (although it's already numeric, this is for consistency)
+    safe_range_text = sanitize_for_prompt(range_text)
+    
+    # Construct the prompt with clear boundaries using XML-like tags
     prompt = f"""
-Generate a creative and slightly humorous description and emoji for a comparison that has been used {range_text} times in a game.
+Generate a creative and slightly humorous description and emoji for a comparison that has been used <count_range>{safe_range_text}</count_range> times in a game.
 
 The description should:
 1. Be brief (under 20 words)
@@ -431,7 +512,9 @@ Your response will be automatically formatted as JSON with the following fields:
     try:
         if LOGGING_ENABLED:
             logger.info(f"Querying LLM for count range description: '{range_text}'")
-            logger.info(f"Request payload: {json.dumps(payload, indent=2)}")
+            # Sanitize the payload before logging
+            sanitized_payload = sanitize_for_logs(payload)
+            logger.info(f"Request payload: {json.dumps(sanitized_payload, indent=2)}")
         
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             response = await client.post(
@@ -446,7 +529,9 @@ Your response will be automatically formatted as JSON with the following fields:
             
             if LOGGING_ENABLED:
                 logger.info(f"Received LLM response for count range '{range_text}'")
-                logger.info(f"Raw LLM response: {json.dumps(response_data, indent=2)}")
+                # Sanitize the response data before logging
+                sanitized_response = sanitize_for_logs(response_data)
+                logger.info(f"Raw LLM response: {json.dumps(sanitized_response, indent=2)}")
                 logger.info(f"Raw LLM content: {content}")
             
             # Parse the JSON response

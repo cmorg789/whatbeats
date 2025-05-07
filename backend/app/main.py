@@ -1,10 +1,15 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, Path, Body
+from fastapi import FastAPI, HTTPException, Depends, Query, Path, Body, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from typing import List, Dict, Any, Optional
 import uvicorn
 import os
 import math
+import time
+import traceback
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -15,6 +20,15 @@ from . import game_service
 from . import database
 from . import report_service
 from . import count_range_service
+
+# Rate limiting configuration
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "5"))  # requests
+RATE_LIMIT_PERIOD = int(os.getenv("RATE_LIMIT_PERIOD", "60"))  # seconds
+
+# Admin API key configuration
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "change-me-in-production")
+api_key_header = APIKeyHeader(name="X-API-Key")
 
 # Load environment variables from root directory
 root_dir = PathLib(__file__).resolve().parents[2]  # Go up two levels to reach the root directory
@@ -28,15 +42,165 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware to allow cross-origin requests
+# Add CORS middleware with restricted origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["http://localhost:3000", "http://localhost:8080", "https://whatbeats.example.com"],  # Restrict to specific origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],  # Expose all headers to the browser
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Accept", "Authorization", "X-API-Key"],
+    expose_headers=["Content-Type", "Content-Length"],  # Only expose necessary headers
 )
+
+# Rate limiting middleware
+class RateLimitMiddleware:
+    """
+    Middleware for rate limiting API requests.
+    
+    This middleware tracks requests by client IP and enforces rate limits
+    to prevent abuse of the API, especially for LLM-related endpoints.
+    """
+    def __init__(self, requests_limit: int, period: int):
+        self.requests_limit = requests_limit
+        self.period = period
+        self.clients = {}
+    
+    async def __call__(self, request: Request, call_next):
+        # Skip rate limiting if disabled
+        if not RATE_LIMIT_ENABLED:
+            return await call_next(request)
+        
+        # Only rate limit LLM-related endpoints
+        path = request.url.path
+        if not (path.startswith("/api/submit-comparison") or "llm" in path.lower()):
+            return await call_next(request)
+        
+        # Get client IP
+        client_ip = request.client.host
+        
+        # Check if client has exceeded rate limit
+        current_time = time.time()
+        if client_ip in self.clients:
+            # Clean up old requests
+            self.clients[client_ip] = [
+                timestamp for timestamp in self.clients[client_ip]
+                if current_time - timestamp < self.period
+            ]
+            
+            # Check if client has exceeded rate limit
+            if len(self.clients[client_ip]) >= self.requests_limit:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": f"Rate limit exceeded. Maximum {self.requests_limit} requests per {self.period} seconds."
+                    }
+                )
+        else:
+            self.clients[client_ip] = []
+        
+        # Add current request timestamp
+        self.clients[client_ip].append(current_time)
+        
+        # Process the request
+        return await call_next(request)
+
+# Add rate limiting middleware if enabled
+if RATE_LIMIT_ENABLED:
+    app.middleware("http")(RateLimitMiddleware(RATE_LIMIT_REQUESTS, RATE_LIMIT_PERIOD))
+
+# Global exception handlers
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """
+    Global exception handler for all unhandled exceptions.
+    
+    This handler prevents detailed error information from being exposed to clients,
+    which could potentially reveal sensitive information about the application.
+    Instead, it returns a generic error message and logs the detailed error for
+    debugging purposes.
+    
+    Args:
+        request: The request that caused the exception
+        exc: The unhandled exception
+        
+    Returns:
+        A JSON response with a generic error message
+    """
+    # Log the detailed error for debugging
+    error_details = traceback.format_exc()
+    print(f"Unhandled exception: {error_details}")
+    
+    # Return a generic error to the client
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred", "code": "INTERNAL_ERROR"}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Exception handler for request validation errors.
+    
+    This handler formats validation errors in a consistent way, making it easier
+    for clients to understand what went wrong with their request without exposing
+    internal details of the validation process.
+    
+    Args:
+        request: The request that caused the validation error
+        exc: The validation error
+        
+    Returns:
+        A JSON response with validation error details
+    """
+    errors = []
+    for error in exc.errors():
+        # Extract field name and error message
+        field_name = error["loc"][-1] if error["loc"] else "unknown"
+        message = error["msg"]
+        errors.append({"name": field_name, "message": message})
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Validation error",
+            "code": "VALIDATION_ERROR",
+            "fields": errors
+        }
+    )
+
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(request: Request, exc: ValidationError):
+    """
+    Exception handler for Pydantic validation errors.
+    
+    This handler formats Pydantic validation errors in a consistent way, similar
+    to the RequestValidationError handler.
+    
+    Args:
+        request: The request that caused the validation error
+        exc: The validation error
+        
+    Returns:
+        A JSON response with validation error details
+    """
+    errors = []
+    for error in exc.errors():
+        # Extract field name and error message
+        field_name = error["loc"][-1] if error["loc"] else "unknown"
+        message = error["msg"]
+        errors.append({"name": field_name, "message": message})
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Validation error",
+            "code": "VALIDATION_ERROR",
+            "fields": errors
+        }
+    )
+
 
 # Initialize count range descriptions on startup
 @app.on_event("startup")
@@ -68,7 +232,7 @@ async def start_game():
 
 
 @app.post("/api/submit-comparison", response_model=models.ComparisonResponse)
-async def submit_comparison(request: models.ComparisonRequest):
+async def submit_comparison(request: models.ComparisonRequest, client_request: Request):
     """Process user input and determine if it beats the current item."""
     try:
         result = await game_service.process_comparison(
@@ -105,6 +269,13 @@ async def submit_comparison(request: models.ComparisonRequest):
                 status_code=422,
                 content=error_response.dict()
             )
+        elif error_message.startswith("INPUT_VALIDATION_ERROR:"):
+            # Return a specific error for input validation
+            error_detail = error_message.split(":", 1)[1].strip()
+            return JSONResponse(
+                status_code=422,
+                content={"detail": error_detail, "code": "INPUT_VALIDATION_ERROR"}
+            )
         else:
             # Other ValueError exceptions (like session not found)
             raise HTTPException(status_code=404, detail=error_message)
@@ -113,10 +284,17 @@ async def submit_comparison(request: models.ComparisonRequest):
 
 
 @app.get("/api/game-status/{session_id}", response_model=models.GameStatusResponse)
-async def get_game_status(session_id: str):
+async def get_game_status(session_id: str, request: Request):
     """Get current game status."""
     try:
-        result = await game_service.get_game_status(session_id)
+        # Get client IP for session validation
+        client_ip = request.client.host
+        
+        # Validate session ownership
+        if not await game_service.validate_session_ownership(session_id, client_ip):
+            raise HTTPException(status_code=403, detail="Unauthorized access to session")
+        
+        result = await game_service.get_game_status(session_id, client_ip)
         
         return models.GameStatusResponse(
             session_id=result["session_id"],
@@ -126,7 +304,11 @@ async def get_game_status(session_id: str):
             is_active=result["is_active"]
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        error_message = str(e)
+        if "Unauthorized" in error_message:
+            raise HTTPException(status_code=403, detail=error_message)
+        else:
+            raise HTTPException(status_code=404, detail=error_message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -338,9 +520,31 @@ async def get_reports(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Admin API key validation
+def get_api_key(api_key: str = Security(api_key_header)):
+    """
+    Validate the API key for admin endpoints.
+    
+    Args:
+        api_key: The API key from the X-API-Key header
+        
+    Returns:
+        The API key if valid
+        
+    Raises:
+        HTTPException: If the API key is invalid
+    """
+    if api_key != ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key"
+        )
+    return api_key
+
 # Admin Endpoints
 @app.get("/api/admin/reports", response_model=models.AdminReportsResponse)
 async def get_admin_reports(
+    api_key: str = Depends(get_api_key),
     status: Optional[str] = Query(None, description="Filter reports by status"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
@@ -380,7 +584,10 @@ async def get_admin_reports(
 
 
 @app.put("/api/admin/comparisons", response_model=Dict[str, Any])
-async def update_comparison(request: models.UpdateComparisonRequest):
+async def update_comparison(
+    request: models.UpdateComparisonRequest,
+    api_key: str = Depends(get_api_key)
+):
     """Update a comparison based on admin corrections."""
     try:
         result = await report_service.update_comparison(
@@ -400,7 +607,8 @@ async def update_comparison(request: models.UpdateComparisonRequest):
 @app.put("/api/admin/reports/{report_id}/status", response_model=Dict[str, Any])
 async def update_report_status(
     report_id: str = Path(..., description="The unique report ID"),
-    request: models.UpdateReportStatusRequest = Body(...)
+    request: models.UpdateReportStatusRequest = Body(...),
+    api_key: str = Depends(get_api_key)
 ):
     """Update the status of a report."""
     try:

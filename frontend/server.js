@@ -72,7 +72,14 @@ const server = http.createServer((req, res) => {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
             'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
-            'Access-Control-Max-Age': '86400' // 24 hours
+            'Access-Control-Max-Age': '86400', // 24 hours
+            // Content Security Policy
+            'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self'; connect-src 'self' http://localhost:8000",
+            // Additional security headers
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'Referrer-Policy': 'no-referrer-when-downgrade',
+            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
         });
         res.end();
         return;
@@ -127,12 +134,19 @@ const server = http.createServer((req, res) => {
                 res.end(`Server Error: ${err.code}`);
             }
         } else {
-            // Success - Add CORS headers
+            // Success - Add CORS headers and security headers
             res.writeHead(200, {
                 'Content-Type': contentType,
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-                'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+                'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+                // Content Security Policy
+                'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self'; connect-src 'self' http://localhost:8000",
+                // Additional security headers
+                'X-Content-Type-Options': 'nosniff',
+                'X-Frame-Options': 'DENY',
+                'Referrer-Policy': 'no-referrer-when-downgrade',
+                'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
             });
             res.end(content, 'utf-8');
         }

@@ -1,10 +1,36 @@
 from typing import Dict, List, Optional, Tuple, Any
 import asyncio
+import re
 from datetime import datetime
 
 from . import database
 from . import llm_service
 from . import count_range_service
+
+def validate_user_input(user_input: str) -> Tuple[bool, str]:
+    """
+    Validate user input to prevent prompt injection and ensure data quality.
+    
+    Args:
+        user_input: The user's input to validate
+        
+    Returns:
+        Tuple of (is_valid: bool, error_message: str)
+        If is_valid is False, error_message contains the reason
+    """
+    # Check for empty input
+    if not user_input or not user_input.strip():
+        return False, "Input cannot be empty"
+    
+    # Limit length
+    if len(user_input) > 50:
+        return False, "Input too long (max 50 characters)"
+    
+    # Allow only alphanumeric characters, spaces, and basic punctuation
+    if not re.match(r'^[a-zA-Z0-9\s.,!?-]+$', user_input):
+        return False, "Input contains invalid characters"
+    
+    return True, ""
 
 
 async def start_game() -> Dict[str, Any]:
@@ -46,6 +72,7 @@ async def process_comparison(session_id: str, current_item: str, user_input: str
     Raises:
         ValueError: If the game session is not found or is no longer active
         ValueError: If the user tries to use an item that has already been used in this game
+        ValueError: If the user input fails validation
     """
     # Get the game session
     session = await database.get_game_session(session_id)
@@ -58,6 +85,11 @@ async def process_comparison(session_id: str, current_item: str, user_input: str
     # Normalize inputs
     current_item = current_item.lower().strip()
     user_input = user_input.lower().strip()
+    
+    # Validate user input
+    is_valid, error_message = validate_user_input(user_input)
+    if not is_valid:
+        raise ValueError(f"INPUT_VALIDATION_ERROR: {error_message}")
     
     # Check if the user is trying to reuse the current item
     if user_input == current_item:
@@ -177,19 +209,52 @@ async def process_comparison(session_id: str, current_item: str, user_input: str
     return response_data
 
 
-async def get_game_status(session_id: str) -> Dict[str, Any]:
+async def validate_session_ownership(session_id: str, request_ip: str) -> bool:
+    """
+    Validate that the request is coming from the session owner.
+    
+    Args:
+        session_id: The unique session ID
+        request_ip: The IP address of the requester
+        
+    Returns:
+        Boolean indicating if the requester is the session owner
+    """
+    session = await database.get_game_session(session_id)
+    if not session:
+        return False
+    
+    # Add IP tracking to sessions
+    if "owner_ip" not in session:
+        # First access, set the owner
+        await database.update_session_owner(session_id, request_ip)
+        return True
+    
+    # Check if the request is from the same IP
+    return session["owner_ip"] == request_ip
+
+async def get_game_status(session_id: str, request_ip: str = None) -> Dict[str, Any]:
     """
     Get the current status of a game session.
     
     Args:
         session_id: The unique session ID
+        request_ip: The IP address of the requester (optional)
         
     Returns:
         Dictionary with game session details
+        
+    Raises:
+        ValueError: If the session is not found or the requester is not authorized
     """
     session = await database.get_game_session(session_id)
     if not session:
         raise ValueError(f"Game session {session_id} not found")
+    
+    # If request_ip is provided, validate ownership
+    if request_ip and "owner_ip" in session:
+        if session["owner_ip"] != request_ip:
+            raise ValueError("Unauthorized access to session")
     
     return {
         "session_id": session["session_id"],

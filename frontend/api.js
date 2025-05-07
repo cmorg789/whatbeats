@@ -125,8 +125,8 @@ const apiService = {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                // Enable withCredentials for CORS with credentials
-                withCredentials: true
+                // Disable withCredentials for better security
+                withCredentials: false
             };
             
             const response = await axios.get(
@@ -281,6 +281,10 @@ const apiService = {
      * @param {string} options.sortDirection - Sort direction: 'asc' or 'desc' (default: 'desc')
      * @returns {Promise} Promise resolving to the admin reports response
      */
+    // Admin API key - in production, this should be securely stored
+    // and not hardcoded in the source code
+    ADMIN_API_KEY: "change-me-in-production",
+    
     getAdminReports: async function(options = {}) {
         try {
             // Set default values
@@ -296,7 +300,17 @@ const apiService = {
                 params.status = options.statusFilters.join(',');
             }
             
-            const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.ADMIN_REPORTS}`, { params });
+            // Add API key to headers for authentication
+            const headers = {
+                'X-API-Key': this.ADMIN_API_KEY,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+            
+            const response = await axios.get(
+                `${API_BASE_URL}${API_ENDPOINTS.ADMIN_REPORTS}`,
+                { params, headers }
+            );
             return response.data;
         } catch (error) {
             console.error('Error getting admin reports:', error);
@@ -316,14 +330,25 @@ const apiService = {
      */
     updateComparison: async function(item1, item2, item1Wins, item2Wins, description, emoji) {
         try {
-            const response = await axios.put(`${API_BASE_URL}${API_ENDPOINTS.ADMIN_UPDATE_COMPARISON}`, {
-                item1: item1,
-                item2: item2,
-                item1_wins: item1Wins,
-                item2_wins: item2Wins,
-                description: description,
-                emoji: emoji
-            });
+            // Add API key to headers for authentication
+            const headers = {
+                'X-API-Key': this.ADMIN_API_KEY,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+            
+            const response = await axios.put(
+                `${API_BASE_URL}${API_ENDPOINTS.ADMIN_UPDATE_COMPARISON}`,
+                {
+                    item1: item1,
+                    item2: item2,
+                    item1_wins: item1Wins,
+                    item2_wins: item2Wins,
+                    description: description,
+                    emoji: emoji
+                },
+                { headers }
+            );
             return response.data;
         } catch (error) {
             console.error('Error updating comparison:', error);
@@ -339,9 +364,20 @@ const apiService = {
      */
     updateReportStatus: async function(reportId, status) {
         try {
-            const response = await axios.put(`${API_BASE_URL}${API_ENDPOINTS.ADMIN_UPDATE_REPORT_STATUS}/${reportId}/status`, {
-                status: status
-            });
+            // Add API key to headers for authentication
+            const headers = {
+                'X-API-Key': this.ADMIN_API_KEY,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+            
+            const response = await axios.put(
+                `${API_BASE_URL}${API_ENDPOINTS.ADMIN_UPDATE_REPORT_STATUS}/${reportId}/status`,
+                {
+                    status: status
+                },
+                { headers }
+            );
             return response.data;
         } catch (error) {
             console.error('Error updating report status:', error);

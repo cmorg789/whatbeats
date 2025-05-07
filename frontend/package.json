@@ -4,7 +4,10 @@
   "description": "Frontend for What Beats Rock? application",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "audit": "npm audit",
+    "audit:fix": "npm audit fix",
+    "deps:check": "npm outdated"
   },
   "dependencies": {
     "dotenv": "^16.0.3"

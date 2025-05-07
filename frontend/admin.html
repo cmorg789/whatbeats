@@ -5,7 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>What Beats Rock? - Admin</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Self-hosted libraries with SRI checks -->
+    <script src="vendor/axios.min.js" integrity="sha384-eTbU15L07D8A2CH9y7XqBPBYLi3+PMji2lR5gfVACpMvl2PUY1jjzlpyUkCEA0st"></script>
+    <!-- Fallback to CDN if local files fail to load -->
+    <script>
+        window.addEventListener('error', function(e) {
+            const target = e.target;
+            if (target.tagName === 'SCRIPT' && target.src.includes('vendor/axios')) {
+                const cdnSrc = 'https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js';
+                const integrity = target.getAttribute('integrity');
+                const crossorigin = 'anonymous';
+                
+                console.warn('Local script failed to load, falling back to CDN:', cdnSrc);
+                
+                const newScript = document.createElement('script');
+                newScript.src = cdnSrc;
+                newScript.integrity = integrity;
+                newScript.crossOrigin = crossorigin;
+                document.head.appendChild(newScript);
+            }
+        }, true);
+    </script>
 </head>
 <body>
     <div class="container">

@@ -923,6 +923,47 @@ footer {
     margin-bottom: 15px;
 }
 
+/* Added classes to replace inline styles */
+.text-center {
+    text-align: center;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.loading-message {
+    text-align: center;
+    color: #666;
+}
+
+.error-message-cell {
+    text-align: center;
+    color: var(--error-color);
+}
+
+.empty-message-cell {
+    text-align: center;
+    color: #666;
+}
+
+/* Validation styles moved from inline to external */
+.invalid-input {
+    border: 2px solid #ff4d4d !important;
+    background-color: #fff0f0;
+}
+
+.validation-error {
+    color: #ff4d4d;
+    font-size: 0.8rem;
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
 .error-message {
     color: var(--error-color);
     font-weight: bold;

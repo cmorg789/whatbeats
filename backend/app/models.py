@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
+import re
 
 
 # Report Models
@@ -8,9 +9,29 @@ class ReportRequest(BaseModel):
     """Request model for submitting a report."""
     session_id: str = Field(..., description="The unique session ID")
     comparison_id: Optional[str] = Field(None, description="The ID of the comparison being reported")
-    item1: str = Field(..., description="The current item in the game")
-    item2: str = Field(..., description="The user's submission")
-    reason: Optional[str] = Field(None, description="The reason for the report")
+    item1: str = Field(..., description="The current item in the game", max_length=50)
+    item2: str = Field(..., description="The user's submission", max_length=50)
+    reason: Optional[str] = Field(None, description="The reason for the report", max_length=500)
+    
+    @validator('session_id')
+    def validate_session_id(cls, v):
+        if not re.match(r'^[a-zA-Z0-9]+$', v):
+            raise ValueError("Invalid session ID format")
+        return v
+    
+    @validator('item1', 'item2')
+    def validate_items(cls, v):
+        if not re.match(r'^[a-zA-Z0-9\s.,!?-]+$', v):
+            raise ValueError("Item contains invalid characters")
+        return v.lower().strip()
+    
+    @validator('reason')
+    def validate_reason(cls, v):
+        if v is not None and len(v) > 0:
+            # Allow a broader range of characters but still sanitize
+            sanitized = re.sub(r'[<>]', '', v)  # Remove potential HTML/script tags
+            return sanitized.strip()
+        return v
 
 
 class ReportResponse(BaseModel):
@@ -19,16 +40,34 @@ class ReportResponse(BaseModel):
     status: str = Field(..., description="The status of the report")
     message: str = Field(..., description="A message to display to the user")
 
-
 # Error Models
 class ErrorResponse(BaseModel):
     """Base error response model."""
     detail: str = Field(..., description="Error detail message")
+    code: str = Field("INTERNAL_ERROR", description="Error code")
 
 
 class ItemAlreadyUsedError(ErrorResponse):
     """Error response for when an item has already been used in the game."""
     code: str = Field("ITEM_ALREADY_USED", description="Error code for item reuse")
+
+
+class ValidationErrorResponse(ErrorResponse):
+    """Error response for validation errors."""
+    code: str = Field("VALIDATION_ERROR", description="Error code for validation errors")
+    fields: List[Dict[str, str]] = Field([], description="List of field-specific errors")
+
+
+class AuthorizationError(ErrorResponse):
+    """Error response for authorization errors."""
+    code: str = Field("AUTHORIZATION_ERROR", description="Error code for authorization errors")
+
+
+class RateLimitError(ErrorResponse):
+    """Error response for rate limit errors."""
+    code: str = Field("RATE_LIMIT_ERROR", description="Error code for rate limit errors")
+    retry_after: int = Field(60, description="Seconds to wait before retrying")
+
 
 
 # Request Models
@@ -40,8 +79,22 @@ class StartGameRequest(BaseModel):
 class ComparisonRequest(BaseModel):
     """Request model for submitting a comparison."""
     session_id: str = Field(..., description="The unique session ID")
-    current_item: str = Field(..., description="The current item in the game")
-    user_input: str = Field(..., description="The user's input for what beats the current item")
+    current_item: str = Field(..., description="The current item in the game", max_length=50)
+    user_input: str = Field(..., description="The user's input for what beats the current item", max_length=50)
+    
+    @validator('user_input')
+    def validate_user_input(cls, v):
+        # Check for valid characters
+        if not re.match(r'^[a-zA-Z0-9\s.,!?-]+$', v):
+            raise ValueError("Input contains invalid characters")
+        return v.lower().strip()
+    
+    @validator('session_id')
+    def validate_session_id(cls, v):
+        # Ensure session_id is a valid format (alphanumeric)
+        if not re.match(r'^[a-zA-Z0-9]+$', v):
+            raise ValueError("Invalid session ID format")
+        return v
 
 
 class EndGameRequest(BaseModel):
@@ -169,8 +222,15 @@ class HighScoresFilterRequest(BaseModel):
 # LLM Models
 class LLMRequest(BaseModel):
     """Request model for LLM API."""
-    current_item: str = Field(..., description="The current item in the game")
-    user_input: str = Field(..., description="The user's input for what beats the current item")
+    current_item: str = Field(..., description="The current item in the game", max_length=50)
+    user_input: str = Field(..., description="The user's input for what beats the current item", max_length=50)
+    
+    @validator('current_item', 'user_input')
+    def validate_inputs(cls, v):
+        # Check for valid characters
+        if not re.match(r'^[a-zA-Z0-9\s.,!?-]+$', v):
+            raise ValueError("Input contains invalid characters")
+        return v.lower().strip()
 
 
 class LLMResponse(BaseModel):
