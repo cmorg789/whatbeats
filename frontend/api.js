@@ -10,7 +10,7 @@
 // Use window.location.hostname instead of process.env.DOMAIN for browser environments
 // Use the current hostname without specifying port 8000
 // This will connect to the nginx proxy which will route /api requests to the backend
-const API_BASE_URL = `http://${window.location.hostname}`;
+const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}`;
 
 // Ensure axios is configured to send credentials with cross-origin requests
 axios.defaults.withCredentials = true;
