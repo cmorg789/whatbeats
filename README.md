@@ -56,7 +56,7 @@ The goal is to create the longest chain of items possible, with each new item be
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/whatbeats.git
+git clone https://github.com/cmorg789/whatbeats.git
 cd whatbeats
 ```
 
