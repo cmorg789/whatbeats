@@ -25,7 +25,7 @@ FROM python:3.13-alpine AS backend-stage
 WORKDIR /app
 
 # Copy installed dependencies from builder stage
-COPY --from=python-deps /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=python-deps /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 
 # Copy the backend application
 COPY whatbeats/backend ./backend
