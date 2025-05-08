@@ -48,7 +48,8 @@ NGINX_TEMPLATE="/etc/nginx/nginx.conf.template"
 mkdir -p /etc/nginx/snippets
 
 # Copy snippet files to the correct location
-cp /etc/nginx/snippets/*.conf /etc/nginx/snippets/ 2>/dev/null || true
+# First, ensure security_headers.conf exists in the target directory
+cp /nginx/snippets/security_headers.conf /etc/nginx/snippets/ 2>/dev/null || echo "Warning: Could not copy security_headers.conf"
 
 if [ "$ENABLE_SSL" = "true" ]; then
     echo "SSL is enabled. Setting up HTTPS configuration..."

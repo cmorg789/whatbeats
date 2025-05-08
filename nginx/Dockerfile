@@ -27,10 +27,14 @@ RUN echo '# Modern SSL configuration for enhanced security\n\n# SSL protocols an
 # Create cors_headers.conf if it doesn't exist
 RUN echo '# CORS configuration with more restrictive approach\n\n# CORS headers with dynamic origin (variable defined in http context)\nadd_header '"'"'Access-Control-Allow-Origin'"'"' $cors_allow_origin always;\nadd_header '"'"'Access-Control-Allow-Methods'"'"' '"'"'GET, POST, OPTIONS, PUT, DELETE'"'"' always;\nadd_header '"'"'Access-Control-Allow-Headers'"'"' '"'"'Origin, X-Requested-With, Content-Type, Accept, Authorization'"'"' always;\nadd_header '"'"'Access-Control-Allow-Credentials'"'"' '"'"'true'"'"' always;\nadd_header '"'"'Access-Control-Max-Age'"'"' '"'"'86400'"'"' always;\nadd_header '"'"'Vary'"'"' '"'"'Origin'"'"' always;\n\n# Direct handling of OPTIONS requests\nif ($request_method = '"'"'OPTIONS'"'"') {\n    add_header '"'"'Access-Control-Allow-Origin'"'"' $cors_allow_origin;\n    add_header '"'"'Access-Control-Allow-Methods'"'"' '"'"'GET, POST, OPTIONS, PUT, DELETE'"'"';\n    add_header '"'"'Access-Control-Allow-Headers'"'"' '"'"'Origin, X-Requested-With, Content-Type, Accept, Authorization'"'"';\n    add_header '"'"'Access-Control-Allow-Credentials'"'"' '"'"'true'"'"';\n    add_header '"'"'Access-Control-Max-Age'"'"' '"'"'86400'"'"';\n    add_header '"'"'Content-Type'"'"' '"'"'text/plain charset=UTF-8'"'"';\n    add_header '"'"'Content-Length'"'"' '"'"'0'"'"';\n    add_header '"'"'Vary'"'"' '"'"'Origin'"'"';\n    return 204;\n}' > /tmp/nginx/snippets/cors_headers.conf
 
+# Create security_headers.conf if it doesn't exist
+RUN echo '# Common security headers for all locations\n\n# Basic security headers\nadd_header X-Content-Type-Options "nosniff" always;\nadd_header X-Frame-Options "DENY" always;\nadd_header Referrer-Policy "no-referrer-when-downgrade" always;\n\n# Add HSTS header (variable defined in http context)\nadd_header Strict-Transport-Security $hsts_header always;\n\n# XSS Protection\nadd_header X-XSS-Protection "1; mode=block" always;\n\n# Content Security Policy\nadd_header Content-Security-Policy "default-src '"'"'self'"'"'; script-src '"'"'self'"'"' '"'"'unsafe-inline'"'"'; style-src '"'"'self'"'"' '"'"'unsafe-inline'"'"'; img-src '"'"'self'"'"' data:; font-src '"'"'self'"'"'; connect-src '"'"'self'"'"'; frame-ancestors '"'"'none'"'"'; form-action '"'"'self'"'"'; upgrade-insecure-requests;" always;\n\n# Permissions Policy\nadd_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;\n\n# Cache control\nadd_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;\nadd_header Pragma "no-cache" always;\nadd_header Expires "0" always;' > /tmp/nginx/snippets/security_headers.conf
+
 # First copy our default generated snippets to ensure we have them
 RUN cp /tmp/nginx/snippets/proxy_params.conf /etc/nginx/snippets/ && \
     cp /tmp/nginx/snippets/ssl_params.conf /etc/nginx/snippets/ && \
-    cp /tmp/nginx/snippets/cors_headers.conf /etc/nginx/snippets/
+    cp /tmp/nginx/snippets/cors_headers.conf /etc/nginx/snippets/ && \
+    cp /tmp/nginx/snippets/security_headers.conf /etc/nginx/snippets/
 
 # Now try to copy user-provided snippets (if they exist, they will overwrite the defaults)
 # We'll use a shell script to handle this properly
@@ -39,6 +43,8 @@ RUN mkdir -p /tmp/copy_snippets && \
     echo 'cp -f /nginx/snippets/proxy_params.conf /etc/nginx/snippets/ 2>/dev/null || true' >> /tmp/copy_snippets/copy.sh && \
     echo 'cp -f /nginx/snippets/ssl_params.conf /etc/nginx/snippets/ 2>/dev/null || true' >> /tmp/copy_snippets/copy.sh && \
     echo 'cp -f /nginx/snippets/cors_headers.conf /etc/nginx/snippets/ 2>/dev/null || true' >> /tmp/copy_snippets/copy.sh && \
+    echo 'cp -f /nginx/snippets/security_headers.conf /etc/nginx/snippets/ 2>/dev/null || true' >> /tmp/copy_snippets/copy.sh && \
+    echo 'echo "Copied snippet files to /etc/nginx/snippets/"' >> /tmp/copy_snippets/copy.sh && \
     chmod +x /tmp/copy_snippets/copy.sh
 
 # Copy the nginx/snippets directory to a temporary location
