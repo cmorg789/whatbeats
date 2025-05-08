@@ -262,7 +262,7 @@ Your response will be automatically formatted as JSON with the following fields:
 
     result: A boolean indicating if the user's suggestion beats the current item
     description: A brief explanation (<30 words) of why the result is true or false. Make it creative and slightly goofy. Don't use the word "literally."
-    emoji: A single relevant emoji that represents the outcome. Do NOT use the cross mark emoji except on failures (❌)!
+    emoji: A single relevant emoji that represents the users input. Do NOT use the cross mark emoji (❌)!
 """
     
     # Prepare the API request

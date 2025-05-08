@@ -1,5 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, Path, Body, Request, Security
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Depends, Query, Path, Body, Request, Security, status
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader, OAuth2PasswordRequestForm
 from fastapi.exceptions import RequestValidationError
@@ -47,16 +46,6 @@ app = FastAPI(
     # Disable Swagger UI and ReDoc documentation
     docs_url=None,
     redoc_url=None
-)
-
-# Add CORS middleware with restricted origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080", "http://localhost:8000", "https://whatbeats.example.com"],  # Restrict to specific origins
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "Accept", "Authorization", "X-API-Key"],
-    expose_headers=["Content-Type", "Content-Length"],  # Only expose necessary headers
 )
 
 # Rate limiting middleware
@@ -569,6 +558,8 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     Raises:
         HTTPException: If authentication fails
     """
+    # Verify status module is properly imported
+    print(f"DEBUG: status.HTTP_401_UNAUTHORIZED = {status.HTTP_401_UNAUTHORIZED}")
     # Verify username
     if form_data.username != ADMIN_USERNAME:
         raise HTTPException(

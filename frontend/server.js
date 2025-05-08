@@ -33,15 +33,11 @@ const MIME_TYPES = {
 const server = http.createServer((req, res) => {
     console.log(`Request: ${req.method} ${req.url}`);
     
-    // Handle CORS preflight requests
+    // Handle preflight requests (now handled by Nginx reverse proxy)
     if (req.method === 'OPTIONS') {
         res.writeHead(204, {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-            'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
-            'Access-Control-Max-Age': '86400', // 24 hours
             // Content Security Policy
-            'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self'; connect-src 'self' http://localhost:8000",
+            'Content-Security-Policy': `default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost http://${process.env.DOMAIN || 'localhost'}`,
             // Additional security headers
             'X-Content-Type-Options': 'nosniff',
             'X-Frame-Options': 'DENY',
@@ -85,14 +81,11 @@ const server = http.createServer((req, res) => {
                 res.end(`Server Error: ${err.code}`);
             }
         } else {
-            // Success - Add CORS headers and security headers
+            // Success - Add security headers only (CORS now handled by Nginx)
             res.writeHead(200, {
                 'Content-Type': contentType,
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-                'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization',
                 // Content Security Policy
-                'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self'; connect-src 'self' http://localhost:8000",
+                'Content-Security-Policy': `default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost http://${process.env.DOMAIN || 'localhost'}`,
                 // Additional security headers
                 'X-Content-Type-Options': 'nosniff',
                 'X-Frame-Options': 'DENY',
@@ -106,7 +99,7 @@ const server = http.createServer((req, res) => {
 
 // Start the server
 server.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}/`);
-    console.log(`Admin interface available at http://localhost:${PORT}/admin`);
+    console.log(`Server running at http://${process.env.DOMAIN || 'localhost'}:${PORT}/`);
+    console.log(`Admin interface available at http://${process.env.DOMAIN || 'localhost'}:${PORT}/admin`);
     console.log(`Press Ctrl+C to stop the server`);
 });

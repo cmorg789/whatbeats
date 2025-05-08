@@ -1,28 +1,58 @@
 services:
+  # Nginx reverse proxy
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: whatbeats-nginx
+    ports:
+      - "80:80"  # HTTP port
+      - "443:443"  # HTTPS port (for SSL)
+    depends_on:
+      - frontend
+      - backend
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+      - ENABLE_SSL=${ENABLE_SSL:-false}
+      - SSL_EMAIL=${SSL_EMAIL:-}
+    volumes:
+      - letsencrypt_certs:/etc/letsencrypt  # For storing SSL certificates
+      - letsencrypt_challenges:/var/www/certbot  # For Let's Encrypt validation
+    restart: unless-stopped
+    networks:
+      - whatbeats-network
+
+  # MongoDB database
   mongodb:
     image: mongo:8.0
     container_name: whatbeats-mongodb
-    ports:
-      - "27017:27017"
+    # No need to expose MongoDB port to host anymore
+    # ports:
+    #   - "27017:27017"
     volumes:
       - mongodb_data:/data/db
     restart: unless-stopped
     networks:
       - whatbeats-network
 
-  whatbeats:
+  # Backend API service
+  backend:
     build:
       context: ..
       dockerfile: whatbeats/Dockerfile
-    container_name: whatbeats-app
-    ports:
-      - "8000:8000"  # Backend API
-      - "3000:3000"  # Frontend
+      target: backend-stage
+    container_name: whatbeats-backend
+    # No need to expose backend port to host anymore
+    # ports:
+    #   - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       - mongodb
     environment:
       - MONGODB_URI=mongodb://mongodb:27017
       - MONGODB_DB=whatbeats
+      - ENABLE_CORS=false  # CORS is handled by Nginx
       # Required environment variables - must be set in .env file or uncommented here
       # - JWT_SECRET_KEY=your_jwt_secret
       # - ADMIN_PASSWORD_HASH=your_admin_password_hash
@@ -32,10 +62,36 @@ services:
     restart: unless-stopped
     networks:
       - whatbeats-network
+    command: ["python", "/app/backend/run.py"]
+
+  # Frontend service
+  frontend:
+    build:
+      context: ..
+      dockerfile: whatbeats/Dockerfile
+      target: frontend-stage
+    container_name: whatbeats-frontend
+    # No need to expose frontend port to host anymore
+    # ports:
+    #   - "3000:3000"
+    expose:
+      - "3000"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}  # Use DOMAIN env var for API URL
+    volumes:
+      - ./.env:/app/.env:ro  # Mount .env file from host
+    restart: unless-stopped
+    networks:
+      - whatbeats-network
+    command: ["node", "/app/frontend/server.js"]
 
 volumes:
   mongodb_data:
     name: whatbeats-mongodb-data
+  letsencrypt_certs:
+    name: whatbeats-letsencrypt-certs
+  letsencrypt_challenges:
+    name: whatbeats-letsencrypt-challenges
 
 networks:
   whatbeats-network:

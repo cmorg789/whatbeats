@@ -5,7 +5,15 @@
 
 // Base URL for API requests - change this to match your backend URL
 // This should point to where your FastAPI backend is running
-const API_BASE_URL = 'http://localhost:8000';
+// Use the DOMAIN environment variable for API requests
+// This allows the frontend to work with the reverse proxy
+// Use window.location.hostname instead of process.env.DOMAIN for browser environments
+// Use the current hostname without specifying port 8000
+// This will connect to the nginx proxy which will route /api requests to the backend
+const API_BASE_URL = `http://${window.location.hostname}`;
+
+// Ensure axios is configured to send credentials with cross-origin requests
+axios.defaults.withCredentials = true;
 
 // API endpoints
 const API_ENDPOINTS = {
@@ -27,7 +35,8 @@ const API_ENDPOINTS = {
 /**
  * API service object with methods for each API endpoint
  */
-const apiService = {
+// Define apiService in the global scope to avoid temporal dead zone issues
+window.apiService = {
     /**
      * Start a new game session
      * @returns {Promise} Promise resolving to the start game response
@@ -119,13 +128,13 @@ const apiService = {
      */
     getComparisonStats: async function(limit = 20) {
         try {
-            // Add explicit headers for CORS
+            // Set standard request headers
             const config = {
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                // Disable withCredentials for better security
+                // Disable withCredentials for public endpoints
                 withCredentials: false
             };
             

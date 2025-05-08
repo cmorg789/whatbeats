@@ -187,8 +187,13 @@ async function startGame() {
         // Reset game state
         resetGameState();
         
+        // Make sure apiService is defined before using it
+        if (typeof window.apiService === 'undefined') {
+            throw new Error("can't access apiService before initialization");
+        }
+        
         // Call API to start game
-        const response = await apiService.startGame();
+        const response = await window.apiService.startGame();
         
         // Update game state with the response from the backend
         gameState.sessionId = response.session_id;
@@ -266,7 +271,7 @@ async function handleSubmit(event) {
         elements.resultArea.classList.add('hidden');
         
         // Call API to submit comparison
-        const response = await apiService.submitComparison(
+        const response = await window.apiService.submitComparison(
             gameState.sessionId,
             gameState.currentItem,
             userInput
@@ -389,7 +394,7 @@ async function endGame(endGameData = null) {
         
         // If no end game data is provided, make the API call
         // This handles cases where the game is manually ended
-        const response = await apiService.endGame(gameState.sessionId);
+        const response = await window.apiService.endGame(gameState.sessionId);
         
         // Update final score
         elements.finalScore.textContent = response.final_score;
@@ -606,7 +611,7 @@ function displayItemsChain(itemsChain) {
         const chainItem = utils.createElement('div', null, 'chain-item item-badge');
         
         const itemText = utils.createElement('span', utils.sanitizeText(item));
-        const itemEmoji = utils.createElement('span', getEmojiForItem(item));
+        const itemEmoji = utils.createElement('span', ' ' + getEmojiForItem(item));
         
         chainItem.appendChild(itemText);
         chainItem.appendChild(itemEmoji);
@@ -642,11 +647,11 @@ async function openStatsModal(tabName = 'comparisons') {
     try {
         if (tabName === 'comparisons') {
             // Load comparison stats
-            const comparisonsResponse = await apiService.getComparisonStats();
+            const comparisonsResponse = await window.apiService.getComparisonStats();
             displayComparisonStats(comparisonsResponse.comparisons);
         } else if (tabName === 'scoreboard') {
             // Load scoreboard stats
-            const stats = await apiService.getScoreboardStats();
+            const stats = await window.apiService.getScoreboardStats();
             displayScoreboardStats(stats);
             
             // Load initial scoreboard data
@@ -953,6 +958,15 @@ function getEmojiForItem(item) {
         'death': '💀'
     };
     
+    // First check if we have this item in our history with an emoji
+    if (gameState.history && gameState.history.length > 0) {
+        const historyItem = gameState.history.find(h => h.userInput.toLowerCase() === item.toLowerCase());
+        if (historyItem && historyItem.emoji) {
+            return historyItem.emoji;
+        }
+    }
+    
+    // Fall back to the emoji map or question mark if not found
     return emojiMap[item.toLowerCase()] || '❓';
 }
 
@@ -1014,7 +1028,7 @@ async function submitReport(event) {
         const reason = elements.reportReason.value.trim();
         
         // Call API to submit report
-        const response = await apiService.reportComparison(
+        const response = await window.apiService.reportComparison(
             gameState.sessionId,
             gameState.lastComparison.currentItem,
             gameState.lastComparison.userInput,
@@ -1085,7 +1099,7 @@ async function loadScoreboardData() {
         };
         
         // Fetch data from API
-        const response = await apiService.getScoreboard(options);
+        const response = await window.apiService.getScoreboard(options);
         
         // Update state
         scoreboardState.totalPages = response.total_pages;
@@ -1271,7 +1285,7 @@ async function saveComparisonChanges(event) {
         }
         
         // Call API to update comparison
-        await apiService.updateComparison(
+        await window.apiService.updateComparison(
             item1,
             item2,
             item1Wins,
@@ -1282,7 +1296,7 @@ async function saveComparisonChanges(event) {
         
         // If there's a report ID, update its status to "reviewed"
         if (editComparisonState.reportId) {
-            await apiService.updateReportStatus(editComparisonState.reportId, 'reviewed');
+            await window.apiService.updateReportStatus(editComparisonState.reportId, 'reviewed');
         }
         
         // Show success message

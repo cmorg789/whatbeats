@@ -1,0 +1,28 @@
+# Serve content over HTTP
+        
+# API requests - proxy to backend
+location /api/ {
+    # Include CORS headers with direct OPTIONS handling
+    include /etc/nginx/snippets/cors_headers.conf;
+    
+    proxy_pass http://backend:8000;
+    include /etc/nginx/snippets/proxy_params.conf;
+}
+
+# Health check endpoint
+location /health {
+    # Include CORS headers with direct OPTIONS handling
+    include /etc/nginx/snippets/cors_headers.conf;
+    
+    proxy_pass http://backend:8000/health;
+    include /etc/nginx/snippets/proxy_params.conf;
+}
+
+# Frontend requests - proxy to frontend
+location / {
+    # Include CORS headers with direct OPTIONS handling
+    include /etc/nginx/snippets/cors_headers.conf;
+    
+    proxy_pass http://frontend:3000;
+    include /etc/nginx/snippets/proxy_params.conf;
+}

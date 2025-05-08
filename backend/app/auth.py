@@ -20,7 +20,35 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/token")
 
 # Verify password
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    # Enhanced debug logging to verify bcrypt is working correctly
+    try:
+        import bcrypt
+        print(f"DEBUG: Using bcrypt version: {bcrypt.__version__}")
+        print(f"DEBUG: bcrypt module location: {bcrypt.__file__}")
+        
+        # Test bcrypt functionality directly
+        test_hash = bcrypt.hashpw(b"test", bcrypt.gensalt())
+        print(f"DEBUG: bcrypt test hash successful: {test_hash is not None}")
+        
+        # Check if passlib is using the correct bcrypt
+        print(f"DEBUG: CryptContext schemes: {pwd_context.schemes()}")
+        print(f"DEBUG: Default scheme: {pwd_context.default_scheme()}")
+    except (ImportError, AttributeError) as e:
+        print(f"DEBUG: bcrypt import issue: {str(e)}")
+        import sys
+        print(f"DEBUG: Python path: {sys.path}")
+        print(f"DEBUG: Installed packages:")
+        import pkg_resources
+        for pkg in pkg_resources.working_set:
+            print(f"  {pkg.project_name}=={pkg.version}")
+    
+    try:
+        result = pwd_context.verify(plain_password, hashed_password)
+        print(f"DEBUG: Password verification result: {result}")
+        return result
+    except Exception as e:
+        print(f"DEBUG: Password verification error: {str(e)}")
+        raise
 
 # Get password hash
 def get_password_hash(password):
