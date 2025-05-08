@@ -12,7 +12,8 @@ const adminState = {
     statusFilters: [],
     sortBy: 'created_at',
     sortDirection: 'desc',
-    reports: []
+    reports: [],
+    isAuthenticated: false
 };
 
 // Edit comparison state
@@ -32,6 +33,7 @@ const elements = {
     nextReportsPageBtn: document.getElementById('next-reports-page-btn'),
     reportsPageInfo: document.getElementById('reports-page-info'),
     backToGameBtn: document.getElementById('back-to-game-btn'),
+    logoutBtn: document.getElementById('logout-btn'),
     
     // Edit comparison elements
     editComparisonModal: document.getElementById('edit-comparison-modal'),
@@ -58,6 +60,9 @@ const elements = {
  * Initialize the admin application
  */
 function initApp() {
+    // Check if user is authenticated
+    checkAuthentication();
+    
     // Add event listeners for status checkboxes
     elements.statusCheckboxes.forEach(checkbox => {
         checkbox.addEventListener('change', handleStatusFilterChange);
@@ -66,6 +71,7 @@ function initApp() {
     elements.prevReportsPageBtn.addEventListener('click', () => navigateReportsPage(-1));
     elements.nextReportsPageBtn.addEventListener('click', () => navigateReportsPage(1));
     elements.backToGameBtn.addEventListener('click', () => window.location.href = '/');
+    elements.logoutBtn.addEventListener('click', logout);
     
     // Edit comparison functionality
     elements.closeEditComparisonModalBtn.addEventListener('click', closeEditComparisonModal);
@@ -82,8 +88,57 @@ function initApp() {
         });
     });
     
-    // Load reports on page load
-    loadAdminReports();
+    // Automatically load the reports tab on page load
+    switchTab('reports');
+}
+
+/**
+ * Check if the user is authenticated
+ * If not, redirect to login page
+ */
+async function checkAuthentication() {
+    // First check if we have a token in localStorage
+    const token = localStorage.getItem('jwt_token');
+    if (!token) {
+        console.log('No token found in localStorage, redirecting to login');
+        redirectToLogin();
+        return;
+    }
+    
+    try {
+        // Try to load reports as a way to check authentication
+        await loadAdminReports();
+        adminState.isAuthenticated = true;
+    } catch (error) {
+        // If we get a 401 Unauthorized error, clear token and redirect to login page
+        if (error.response && error.response.status === 401) {
+            console.log('Token invalid or expired, redirecting to login');
+            localStorage.removeItem('jwt_token'); // Clear invalid token
+            redirectToLogin();
+        } else {
+            console.error('Error checking authentication:', error);
+        }
+    }
+}
+
+/**
+ * Redirect to login page
+ */
+function redirectToLogin() {
+    window.location.href = '/login.html';
+}
+
+/**
+ * Logout the user
+ * Clears the JWT token and redirects to login page
+ */
+function logout() {
+    // Clear the token from localStorage
+    localStorage.removeItem('jwt_token');
+    console.log('User logged out, token removed');
+    
+    // Redirect to login page
+    redirectToLogin();
 }
 
 /**
@@ -131,6 +186,7 @@ async function loadAdminReports() {
         // Update admin state
         adminState.reports = result.reports;
         adminState.totalPages = result.total_pages;
+        adminState.isAuthenticated = true;
         
         // Display reports
         displayAdminReports(result.reports);
@@ -140,6 +196,13 @@ async function loadAdminReports() {
         
     } catch (error) {
         console.error('Error loading admin reports:', error);
+        
+        // Check if the error is due to authentication
+        if (error.response && error.response.status === 401) {
+            redirectToLogin();
+            return;
+        }
+        
         elements.reportsBody.innerHTML = `<tr><td colspan="7" class="error-message-cell">Error loading reports: ${error.message}</td></tr>`;
     }
 }
@@ -311,6 +374,13 @@ async function updateReportStatus(reportId, status) {
         await loadAdminReports();
     } catch (error) {
         console.error('Error updating report status:', error);
+        
+        // Check if the error is due to authentication
+        if (error.response && error.response.status === 401) {
+            redirectToLogin();
+            return;
+        }
+        
         alert(`Error updating report status: ${error.message}`);
     }
 }
@@ -412,6 +482,13 @@ async function saveComparisonChanges(event) {
         
     } catch (error) {
         console.error('Error saving comparison changes:', error);
+        
+        // Check if the error is due to authentication
+        if (error.response && error.response.status === 401) {
+            redirectToLogin();
+            return;
+        }
+        
         elements.editError.classList.remove('hidden');
     }
 }

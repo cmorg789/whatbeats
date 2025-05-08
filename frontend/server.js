@@ -15,10 +15,6 @@ dotenv.config({ path: path.join(rootDir, '.env') });
 // Port to run the server on
 const PORT = 3000;
 
-// Admin credentials from environment variables with fallbacks
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'securepassword';
-
 // MIME types for different file extensions
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -32,35 +28,6 @@ const MIME_TYPES = {
     '.ico': 'image/x-icon'
 };
 
-/**
- * Check if a request is for an admin resource
- * @param {string} url - The request URL
- * @returns {boolean} True if the URL is for an admin resource
- */
-function isAdminResource(url) {
-    return url === '/admin' ||
-           url === '/admin.html' ||
-           url.startsWith('/admin/');
-}
-
-/**
- * Verify HTTP Basic Authentication credentials
- * @param {string} authHeader - The Authorization header
- * @returns {boolean} True if credentials are valid
- */
-function verifyCredentials(authHeader) {
-    if (!authHeader || !authHeader.startsWith('Basic ')) {
-        return false;
-    }
-
-    // Extract and decode the credentials
-    const base64Credentials = authHeader.split(' ')[1];
-    const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
-    const [username, password] = credentials.split(':');
-
-    // Verify against expected credentials
-    return username === ADMIN_USERNAME && password === ADMIN_PASSWORD;
-}
 
 // Create the server
 const server = http.createServer((req, res) => {
@@ -85,29 +52,13 @@ const server = http.createServer((req, res) => {
         return;
     }
     
-    // Check if the request is for an admin resource
-    if (isAdminResource(req.url)) {
-        // Get the Authorization header
-        const authHeader = req.headers.authorization;
-        
-        // If no credentials or invalid credentials, request authentication
-        if (!verifyCredentials(authHeader)) {
-            res.writeHead(401, {
-                'WWW-Authenticate': 'Basic realm="Admin Access"',
-                'Content-Type': 'text/plain'
-            });
-            res.end('Authentication required for admin access');
-            return;
-        }
-        
-        // If URL is just /admin, redirect to admin.html
-        if (req.url === '/admin') {
-            res.writeHead(302, {
-                'Location': '/admin.html'
-            });
-            res.end();
-            return;
-        }
+    // If URL is just /admin, redirect to admin.html
+    if (req.url === '/admin') {
+        res.writeHead(302, {
+            'Location': '/admin.html'
+        });
+        res.end();
+        return;
     }
     
     // Get the file path

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Query, Path, Body, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
+from fastapi.security import APIKeyHeader, OAuth2PasswordRequestForm
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from typing import List, Dict, Any, Optional
@@ -10,7 +10,7 @@ import os
 import math
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 from pathlib import Path as PathLib
@@ -20,15 +20,22 @@ from . import game_service
 from . import database
 from . import report_service
 from . import count_range_service
+from .auth import verify_password, create_access_token, get_admin_user, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Rate limiting configuration
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "10"))  # requests
 RATE_LIMIT_PERIOD = int(os.getenv("RATE_LIMIT_PERIOD", "60"))  # seconds
 
-# Admin API key configuration
-ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "change-me-in-production")
+# Admin API key configuration (legacy, to be removed after JWT transition)
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
 api_key_header = APIKeyHeader(name="X-API-Key")
+
+# Admin credentials
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH")
+if not ADMIN_PASSWORD_HASH:
+    raise ValueError("ADMIN_PASSWORD_HASH environment variable must be set")
 
 # Load environment variables from root directory
 root_dir = PathLib(__file__).resolve().parents[2]  # Go up two levels to reach the root directory
@@ -520,7 +527,7 @@ async def get_reports(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Admin API key validation
+# Admin API key validation (legacy, to be removed after JWT transition)
 def get_api_key(api_key: str = Security(api_key_header)):
     """
     Validate the API key for admin endpoints.
@@ -534,6 +541,12 @@ def get_api_key(api_key: str = Security(api_key_header)):
     Raises:
         HTTPException: If the API key is invalid
     """
+    if not ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="API key authentication is not configured"
+        )
+    
     if api_key != ADMIN_API_KEY:
         raise HTTPException(
             status_code=403,
@@ -541,10 +554,50 @@ def get_api_key(api_key: str = Security(api_key_header)):
         )
     return api_key
 
+# Login endpoint for JWT token generation
+@app.post("/api/token")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    Authenticate user and generate JWT token.
+    
+    Args:
+        form_data: OAuth2 password request form containing username and password
+        
+    Returns:
+        JWT token if authentication is successful
+        
+    Raises:
+        HTTPException: If authentication fails
+    """
+    # Verify username
+    if form_data.username != ADMIN_USERNAME:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verify password (using stored hash)
+    if not verify_password(form_data.password, ADMIN_PASSWORD_HASH):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": form_data.username}, expires_delta=access_token_expires
+    )
+    
+    # Return token
+    return {"access_token": access_token, "token_type": "bearer"}
+
 # Admin Endpoints
 @app.get("/api/admin/reports", response_model=models.AdminReportsResponse)
 async def get_admin_reports(
-    api_key: str = Depends(get_api_key),
+    current_user: dict = Depends(get_admin_user),
     status: Optional[str] = Query(None, description="Filter reports by status"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
@@ -586,7 +639,7 @@ async def get_admin_reports(
 @app.put("/api/admin/comparisons", response_model=Dict[str, Any])
 async def update_comparison(
     request: models.UpdateComparisonRequest,
-    api_key: str = Depends(get_api_key)
+    current_user: dict = Depends(get_admin_user)
 ):
     """Update a comparison based on admin corrections."""
     try:
@@ -608,7 +661,7 @@ async def update_comparison(
 async def update_report_status(
     report_id: str = Path(..., description="The unique report ID"),
     request: models.UpdateReportStatusRequest = Body(...),
-    api_key: str = Depends(get_api_key)
+    current_user: dict = Depends(get_admin_user)
 ):
     """Update the status of a report."""
     try:

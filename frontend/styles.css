@@ -198,8 +198,24 @@ button {
 .game-over-buttons {
     display: flex;
     justify-content: center;
-    gap: 15px;
     margin-top: 20px;
+}
+
+.report-link-container {
+    text-align: center;
+    margin-top: 15px;
+}
+
+.report-link {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: var(--transition);
+}
+
+.report-link:hover {
+    color: var(--secondary-color);
+    text-decoration: underline;
 }
 
 .highlight {
@@ -210,26 +226,75 @@ button {
 }
 
 .items-chain {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
     margin: 20px 0;
+    overflow-x: auto; /* Allow horizontal scrolling if needed */
+}
+
+.chain-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: nowrap; /* Prevent wrapping to new line */
+    gap: 10px;
+    padding: 10px 0;
+    width: max-content; /* Allow container to expand */
+    margin: 0 auto; /* Center the container */
+    max-width: 100%; /* Ensure it doesn't overflow the parent */
 }
 
 .chain-item {
-    background-color: var(--background-color);
     padding: 8px 15px;
     border-radius: 20px;
     display: flex;
     align-items: center;
     gap: 5px;
+    white-space: nowrap; /* Prevent text wrapping */
+}
+
+/* When chain-item has item-badge class, we don't need to set the background again */
+.chain-item.item-badge {
+    padding: 8px 15px;
+    /* The item-badge class already provides the background and border styles */
 }
 
 .chain-arrow {
     font-size: 1.5rem;
     color: var(--secondary-color);
     margin: 0 5px;
+    display: inline-flex; /* Ensure inline display */
+    align-items: center;
+}
+
+.chain-failure {
+    font-size: 1.5rem;
+    color: var(--error-color);
+    margin: 0 5px;
+    font-weight: bold;
+    display: inline-flex; /* Ensure inline display */
+    align-items: center;
+}
+
+/* Bonus feature: X overlaid on arrow */
+.chain-failure-overlay {
+    position: relative;
+    font-size: 1.5rem;
+    margin: 0 5px;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.chain-failure-overlay .arrow {
+    color: var(--secondary-color);
+    opacity: 0.5;
+}
+
+.chain-failure-overlay .x-symbol {
+    position: absolute;
+    color: var(--error-color);
+    font-weight: bold;
 }
 
 /* History section styles */
@@ -264,6 +329,19 @@ button {
 
 .history-result {
     font-weight: bold;
+}
+
+/* Item badge styles */
+.item-badge {
+    display: inline-block;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    padding: 3px 8px;
+    margin: 0 3px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .usage-count {
@@ -938,6 +1016,15 @@ footer {
 
 .loading-message {
     text-align: center;
+}
+
+/* Scoreboard chain container styles */
+.scoreboard-chain-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
     color: #666;
 }
 
@@ -968,4 +1055,107 @@ footer {
     color: var(--error-color);
     font-weight: bold;
     margin-bottom: 15px;
+}
+
+/* Login page styles */
+.login-form-container {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 30px;
+    background-color: var(--card-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    border-top: 4px solid var(--primary-color);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.login-form-container:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+#login-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+}
+
+.login-icon {
+    font-size: 3rem;
+    text-align: center;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+}
+
+.login-form-container h2 {
+    text-align: center;
+    color: var(--secondary-color);
+    margin-bottom: 10px;
+}
+
+.login-description {
+    text-align: center;
+    color: #666;
+    margin-bottom: 25px;
+    font-size: 0.95rem;
+}
+
+#login-form .form-group {
+    margin-bottom: 25px;
+}
+
+#login-form label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: var(--secondary-color);
+    font-size: 1rem;
+}
+
+#login-form input[type="text"],
+#login-form input[type="password"] {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+#login-form input[type="text"]:focus,
+#login-form input[type="password"]:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.2);
+    outline: none;
+}
+
+#login-form .form-actions {
+    margin-top: 30px;
+}
+
+#login-form button {
+    width: 100%;
+    padding: 14px;
+    font-size: 1.1rem;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#login-form button:hover {
+    background-color: var(--secondary-color);
+}
+
+#login-error {
+    padding: 10px;
+    background-color: rgba(244, 67, 54, 0.1);
+    border-left: 4px solid var(--error-color);
+    color: var(--error-color);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    margin-bottom: 20px;
 }

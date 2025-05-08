@@ -57,6 +57,23 @@ else
     echo "Warning: requirements.txt not found. Dependencies may be missing."
 fi
 
+# Check if secrets are generated and have values
+echo "Checking for application secrets..."
+if [ ! -f ".env" ] || \
+   ! grep -q "JWT_SECRET_KEY=.\+" .env || \
+   ! grep -q "ADMIN_PASSWORD_HASH=.\+" .env || \
+   ! grep -q "LLM_API_KEY=.\+" .env; then
+    echo "Required secrets not found or have empty values in .env file. Running generate_secrets.sh to create them..."
+    bash generate_secrets.sh
+    if [ $? -ne 0 ]; then
+        echo "Failed to generate secrets. Please run generate_secrets.sh manually."
+        exit 1
+    fi
+    echo "Secrets generated successfully."
+else
+    echo "Required secrets found with values in .env file."
+fi
+
 # Start the backend server in a new terminal
 echo "Starting backend server..."
 # Get the absolute path to the script directory

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Beats Rock? - Admin Login</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Self-hosted libraries with SRI checks -->
+    <script src="vendor/axios.min.js" integrity="sha384-eTbU15L07D8A2CH9y7XqBPBYLi3+PMji2lR5gfVACpMvl2PUY1jjzlpyUkCEA0st"></script>
+    <!-- Fallback to CDN if local files fail to load -->
+    <script>
+        window.addEventListener('error', function(e) {
+            const target = e.target;
+            if (target.tagName === 'SCRIPT' && target.src.includes('vendor/axios')) {
+                const cdnSrc = 'https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js';
+                const integrity = target.getAttribute('integrity');
+                const crossorigin = 'anonymous';
+                
+                console.warn('Local script failed to load, falling back to CDN:', cdnSrc);
+                
+                const newScript = document.createElement('script');
+                newScript.src = cdnSrc;
+                newScript.integrity = integrity;
+                newScript.crossOrigin = crossorigin;
+                document.head.appendChild(newScript);
+            }
+        }, true);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>What Beats Rock? - Admin Login</h1>
+            <p class="subtitle">Please sign in to access the admin dashboard</p>
+        </header>
+        
+        <main>
+            <section id="login-section">
+                <div class="login-form-container">
+                    <div class="login-icon">🔐</div>
+                    <h2>Admin Access</h2>
+                    <p class="login-description">Enter your credentials to manage game content</p>
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label for="username">Username:</label>
+                            <input type="text" id="username" name="username" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="password">Password:</label>
+                            <input type="password" id="password" name="password" required>
+                        </div>
+                        
+                        <div id="login-error" class="error-message hidden"></div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="primary-btn">Login</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <script src="api.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginForm = document.getElementById('login-form');
+            const loginError = document.getElementById('login-error');
+            
+            // Check if user is already logged in
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                // Redirect to admin page if token exists
+                window.location.href = '/admin.html';
+                return;
+            }
+            
+            loginForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                
+                try {
+                    loginError.classList.add('hidden');
+                    const result = await apiService.login(username, password);
+                    
+                    // Redirect to admin page on successful login
+                    window.location.href = '/admin.html';
+                } catch (error) {
+                    loginError.textContent = error.message || 'Login failed. Please check your credentials.';
+                    loginError.classList.remove('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

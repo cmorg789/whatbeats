@@ -19,6 +19,11 @@ LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_API_URL = os.getenv("LLM_API_URL", "https://openrouter.ai/api/v1/chat/completions")
 LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-3.5-turbo")
 
+# Key rotation settings
+KEY_ROTATION_ENABLED = os.getenv("KEY_ROTATION_ENABLED", "false").lower() == "true"
+KEY_ROTATION_INTERVAL_DAYS = int(os.getenv("KEY_ROTATION_INTERVAL_DAYS", "30"))
+KEY_LAST_ROTATED_FILE = os.path.join(PROJECT_ROOT, ".key_last_rotated")
+
 # Timeout for API requests (in seconds)
 TIMEOUT = 30.0
 
@@ -125,6 +130,61 @@ def sanitize_for_logs(data: Any) -> Any:
     
     return sanitized
 
+def rotate_api_key():
+    """
+    Check if API key needs rotation and rotate if necessary.
+    
+    This function checks when the API key was last rotated and triggers
+    a rotation if the configured interval has passed. In a production
+    environment, this would integrate with a secrets manager service.
+    
+    Returns:
+        bool: True if key was rotated, False otherwise
+    """
+    if not KEY_ROTATION_ENABLED:
+        if LOGGING_ENABLED:
+            logger.debug("Key rotation is disabled")
+        return False
+    
+    try:
+        # Check when key was last rotated
+        last_rotated = None
+        if os.path.exists(KEY_LAST_ROTATED_FILE):
+            with open(KEY_LAST_ROTATED_FILE, 'r') as f:
+                try:
+                    last_rotated_str = f.read().strip()
+                    last_rotated = datetime.strptime(last_rotated_str, "%Y-%m-%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    last_rotated = None
+        
+        # If never rotated or rotation interval has passed
+        now = datetime.now()
+        if last_rotated is None or (now - last_rotated).days >= KEY_ROTATION_INTERVAL_DAYS:
+            if LOGGING_ENABLED:
+                logger.info(f"API key rotation triggered. Last rotation: {last_rotated}")
+            
+            # In a real implementation, this would call an external secrets manager
+            # or API to rotate the key. For this example, we'll just update the
+            # last rotated timestamp.
+            
+            # Update last rotated timestamp
+            with open(KEY_LAST_ROTATED_FILE, 'w') as f:
+                f.write(now.strftime("%Y-%m-%d %H:%M:%S"))
+            
+            if LOGGING_ENABLED:
+                logger.info("API key rotation completed successfully")
+            
+            return True
+        else:
+            if LOGGING_ENABLED:
+                logger.debug(f"API key rotation not needed. Last rotated: {last_rotated}")
+            return False
+            
+    except Exception as e:
+        if LOGGING_ENABLED:
+            logger.error(f"Error during API key rotation: {str(e)}")
+        return False
+
 async def query_llm(current_item: str, user_input: str) -> Tuple[bool, str, str]:
     """
     Query the LLM to determine if user_input beats current_item.
@@ -148,6 +208,9 @@ async def query_llm(current_item: str, user_input: str) -> Tuple[bool, str, str]
         httpx.HTTPStatusError: If the API returns an error status code
         json.JSONDecodeError: If the response cannot be parsed as JSON despite schema validation
     """
+    # Check if API key rotation is needed
+    rotate_api_key()
+    
     if not LLM_API_KEY:
         raise ValueError("LLM_API_KEY environment variable is not set")
     
@@ -460,6 +523,9 @@ async def generate_count_range_description(range_start: int, range_end: Optional
         httpx.HTTPStatusError: If the API returns an error status code
         json.JSONDecodeError: If the response cannot be parsed as JSON
     """
+    # Check if API key rotation is needed
+    rotate_api_key()
+    
     if not LLM_API_KEY:
         raise ValueError("LLM_API_KEY environment variable is not set")
     

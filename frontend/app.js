@@ -292,10 +292,11 @@ async function handleSubmit(event) {
             count: response.count
         };
         
-        // Store the last comparison for reporting
+        // Store the last comparison for reporting and failure tracking
         gameState.lastComparison = {
             currentItem: gameState.currentItem,
-            userInput: userInput
+            userInput: userInput,
+            result: response.result
         };
         gameState.history.unshift(historyItem); // Add to beginning of array
         
@@ -374,8 +375,20 @@ async function endGame(endGameData = null) {
                 elements.highScoreMessage.classList.add('hidden');
             }
             
+            // If the game ended due to a failed comparison, add the failed item directly
+            let itemsChain = [...endGameData.items_chain];
+            
+            // Check if the last item in history was a failure
+            if (gameState.history.length > 0 && !gameState.history[0].result) {
+                // Add the failed item if available (without the FAILURE text)
+                if (gameState.lastComparison && gameState.lastComparison.userInput) {
+                    // We'll mark this as a failure in the displayItemsChain function
+                    itemsChain.push(gameState.lastComparison.userInput);
+                }
+            }
+            
             // Display items chain
-            displayItemsChain(endGameData.items_chain);
+            displayItemsChain(itemsChain);
             
             // Show game over screen
             showScreen('gameOver');
@@ -397,8 +410,20 @@ async function endGame(endGameData = null) {
             elements.highScoreMessage.classList.add('hidden');
         }
         
+        // Check if the game ended due to a failed comparison
+        let itemsChain = [...response.items_chain];
+        
+        // Check if the last item in history was a failure
+        if (gameState.history.length > 0 && !gameState.history[0].result) {
+            // Add the failed item if available (without the FAILURE text)
+            if (gameState.lastComparison && gameState.lastComparison.userInput) {
+                // We'll mark this as a failure in the displayItemsChain function
+                itemsChain.push(gameState.lastComparison.userInput);
+            }
+        }
+        
         // Display items chain
-        displayItemsChain(response.items_chain);
+        displayItemsChain(itemsChain);
         
         // Show game over screen
         showScreen('gameOver');
@@ -531,7 +556,22 @@ function updateHistoryDisplay() {
         const text = document.createElement('div');
         text.className = 'history-text';
         
-        const comparison = utils.createElement('div', `${utils.sanitizeText(item.userInput)} vs ${utils.sanitizeText(item.currentItem)}`);
+        // Create comparison div
+        const comparison = document.createElement('div');
+        
+        // Create badge for user input item
+        const userInputBadge = utils.createElement('span', utils.sanitizeText(item.userInput), 'item-badge');
+        
+        // Create "vs" text node
+        const vsText = document.createTextNode(' vs ');
+        
+        // Create badge for current item
+        const currentItemBadge = utils.createElement('span', utils.sanitizeText(item.currentItem), 'item-badge');
+        
+        // Append all elements to the comparison div
+        comparison.appendChild(userInputBadge);
+        comparison.appendChild(vsText);
+        comparison.appendChild(currentItemBadge);
         
         const result = utils.createElement('div', item.description, 'history-result ' + (item.result ? 'success' : 'error'));
         
@@ -563,22 +603,37 @@ function displayItemsChain(itemsChain) {
         elements.itemsChain.removeChild(elements.itemsChain.firstChild);
     }
     
+    // Create a horizontal container for the chain
+    const chainContainer = utils.createElement('div', null, 'chain-container');
+    elements.itemsChain.appendChild(chainContainer);
+    
+    // Check if the last item represents a failure (based on game history)
+    const hasFailure = gameState.history.length > 0 && !gameState.history[0].result;
+    
     itemsChain.forEach((item, index) => {
-        const chainItem = utils.createElement('div', null, 'chain-item');
+        // Use the same badge style as in the history items for consistency
+        const chainItem = utils.createElement('div', null, 'chain-item item-badge');
         
         const itemText = utils.createElement('span', utils.sanitizeText(item));
-        
         const itemEmoji = utils.createElement('span', getEmojiForItem(item));
         
         chainItem.appendChild(itemText);
         chainItem.appendChild(itemEmoji);
         
-        elements.itemsChain.appendChild(chainItem);
+        chainContainer.appendChild(chainItem);
         
-        // Add arrow between items
+        // Add arrow or failure symbol between items
         if (index < itemsChain.length - 1) {
-            const arrow = utils.createElement('span', '→', 'chain-arrow');
-            elements.itemsChain.appendChild(arrow);
+            // If this is the last successful item and the next is the failed item
+            if (hasFailure && index === itemsChain.length - 2) {
+                // Use X symbol for failure
+                const failure = utils.createElement('span', '✕', 'chain-failure');
+                chainContainer.appendChild(failure);
+            } else {
+                // Regular arrow for success
+                const arrow = utils.createElement('span', '→', 'chain-arrow');
+                chainContainer.appendChild(arrow);
+            }
         }
     });
 }
@@ -637,13 +692,33 @@ function displayComparisonStats(comparisons) {
     comparisons.forEach(comp => {
         const row = document.createElement('tr');
         
-        const item1Cell = utils.createElement('td', utils.sanitizeText(comp.item1));
+        // Create item1 cell with badge
+        const item1Cell = document.createElement('td');
+        const item1Badge = utils.createElement('span', utils.sanitizeText(comp.item1), 'item-badge');
+        item1Cell.appendChild(item1Badge);
         
-        const item2Cell = utils.createElement('td', utils.sanitizeText(comp.item2));
+        // Create item2 cell with badge
+        const item2Cell = document.createElement('td');
+        const item2Badge = utils.createElement('span', utils.sanitizeText(comp.item2), 'item-badge');
+        item2Cell.appendChild(item2Badge);
         
-        const resultCell = utils.createElement('td', comp.item2_wins ?
-            `${utils.sanitizeText(comp.item2)} beats ${utils.sanitizeText(comp.item1)}` :
-            `${utils.sanitizeText(comp.item1)} beats ${utils.sanitizeText(comp.item2)}`);
+        // Create result cell with badges
+        const resultCell = document.createElement('td');
+        if (comp.item2_wins) {
+            const winnerBadge = utils.createElement('span', utils.sanitizeText(comp.item2), 'item-badge');
+            const beatsText = document.createTextNode(' beats ');
+            const loserBadge = utils.createElement('span', utils.sanitizeText(comp.item1), 'item-badge');
+            resultCell.appendChild(winnerBadge);
+            resultCell.appendChild(beatsText);
+            resultCell.appendChild(loserBadge);
+        } else {
+            const winnerBadge = utils.createElement('span', utils.sanitizeText(comp.item1), 'item-badge');
+            const beatsText = document.createTextNode(' beats ');
+            const loserBadge = utils.createElement('span', utils.sanitizeText(comp.item2), 'item-badge');
+            resultCell.appendChild(winnerBadge);
+            resultCell.appendChild(beatsText);
+            resultCell.appendChild(loserBadge);
+        }
         
         const countCell = utils.createElement('td', comp.count.toString());
         
@@ -1086,7 +1161,25 @@ function displayScoreboardData(highScores) {
         
         // Items chain column
         const chainCell = document.createElement('td');
-        chainCell.textContent = score.items_chain.join(' → ');
+        
+        // Create a container for the items chain
+        const chainContainer = document.createElement('div');
+        chainContainer.className = 'scoreboard-chain-container';
+        
+        // Add each item as a badge with arrows between them
+        score.items_chain.forEach((item, idx) => {
+            // Create badge for the item
+            const itemBadge = utils.createElement('span', utils.sanitizeText(item), 'item-badge');
+            chainContainer.appendChild(itemBadge);
+            
+            // Add arrow between items (except after the last item)
+            if (idx < score.items_chain.length - 1) {
+                const arrow = document.createTextNode(' → ');
+                chainContainer.appendChild(arrow);
+            }
+        });
+        
+        chainCell.appendChild(chainContainer);
         
         // Date column
         const dateCell = document.createElement('td');

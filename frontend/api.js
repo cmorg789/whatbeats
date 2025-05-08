@@ -281,9 +281,39 @@ const apiService = {
      * @param {string} options.sortDirection - Sort direction: 'asc' or 'desc' (default: 'desc')
      * @returns {Promise} Promise resolving to the admin reports response
      */
-    // Admin API key - in production, this should be securely stored
-    // and not hardcoded in the source code
-    ADMIN_API_KEY: "change-me-in-production",
+    /**
+     * Login to the admin interface
+     * @param {string} username - Admin username
+     * @param {string} password - Admin password
+     * @returns {Promise} Promise resolving to the login response
+     */
+    login: async function(username, password) {
+        try {
+            const response = await axios.post(`${API_BASE_URL}/api/token`,
+                new URLSearchParams({
+                    'username': username,
+                    'password': password
+                }),
+                {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    withCredentials: true // Important for cookies
+                }
+            );
+            
+            // Store the token in localStorage for future requests
+            if (response.data && response.data.access_token) {
+                localStorage.setItem('jwt_token', response.data.access_token);
+                console.log('Token stored in localStorage');
+            }
+            
+            return response.data;
+        } catch (error) {
+            console.error('Login error:', error);
+            throw this.handleError(error);
+        }
+    },
     
     getAdminReports: async function(options = {}) {
         try {
@@ -300,16 +330,25 @@ const apiService = {
                 params.status = options.statusFilters.join(',');
             }
             
-            // Add API key to headers for authentication
+            // Set headers for content type and authorization
             const headers = {
-                'X-API-Key': this.ADMIN_API_KEY,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             };
             
+            // Add Authorization header if we have a token
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
             const response = await axios.get(
                 `${API_BASE_URL}${API_ENDPOINTS.ADMIN_REPORTS}`,
-                { params, headers }
+                {
+                    params,
+                    headers,
+                    withCredentials: true // Important for sending cookies
+                }
             );
             return response.data;
         } catch (error) {
@@ -330,12 +369,17 @@ const apiService = {
      */
     updateComparison: async function(item1, item2, item1Wins, item2Wins, description, emoji) {
         try {
-            // Add API key to headers for authentication
+            // Set headers for content type and authorization
             const headers = {
-                'X-API-Key': this.ADMIN_API_KEY,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             };
+            
+            // Add Authorization header if we have a token
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             
             const response = await axios.put(
                 `${API_BASE_URL}${API_ENDPOINTS.ADMIN_UPDATE_COMPARISON}`,
@@ -347,7 +391,10 @@ const apiService = {
                     description: description,
                     emoji: emoji
                 },
-                { headers }
+                {
+                    headers,
+                    withCredentials: true // Important for sending cookies
+                }
             );
             return response.data;
         } catch (error) {
@@ -364,19 +411,27 @@ const apiService = {
      */
     updateReportStatus: async function(reportId, status) {
         try {
-            // Add API key to headers for authentication
+            // Set headers for content type and authorization
             const headers = {
-                'X-API-Key': this.ADMIN_API_KEY,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             };
+            
+            // Add Authorization header if we have a token
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             
             const response = await axios.put(
                 `${API_BASE_URL}${API_ENDPOINTS.ADMIN_UPDATE_REPORT_STATUS}/${reportId}/status`,
                 {
                     status: status
                 },
-                { headers }
+                {
+                    headers,
+                    withCredentials: true // Important for sending cookies
+                }
             );
             return response.data;
         } catch (error) {
