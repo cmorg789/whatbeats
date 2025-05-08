@@ -1,13 +1,23 @@
 import os
 import re
+import time
+import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Tuple
 
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, OperationFailure
 from pymongo.collection import Collection
 from pymongo.database import Database
 from bson.objectid import ObjectId
 from dotenv import load_dotenv
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -15,26 +25,117 @@ load_dotenv()
 # MongoDB connection settings
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "whatbeats")
+MONGODB_CONNECT_TIMEOUT = int(os.getenv("MONGODB_CONNECT_TIMEOUT", "5000"))  # 5 seconds
+MONGODB_MAX_RETRIES = int(os.getenv("MONGODB_MAX_RETRIES", "3"))
 
-# Initialize MongoDB client
-client = MongoClient(MONGODB_URI)
-db = client[MONGODB_DB]
+# Initialize MongoDB client and database as None initially
+client = None
+db = None
+comparisons_collection = None
+game_sessions_collection = None
+high_scores_collection = None
+reports_collection = None
+count_ranges_collection = None
 
-# Collections
-comparisons_collection = db["comparisons"]
-game_sessions_collection = db["game_sessions"]
-high_scores_collection = db["high_scores"]
-reports_collection = db["reports"]
-count_ranges_collection = db["count_ranges"]
+def initialize_db_connection(max_retries=MONGODB_MAX_RETRIES):
+    """
+    Initialize the database connection with retry logic.
+    
+    Args:
+        max_retries: Maximum number of connection attempts
+        
+    Returns:
+        Tuple[bool, str]: Success status and message
+    """
+    global client, db, comparisons_collection, game_sessions_collection
+    global high_scores_collection, reports_collection, count_ranges_collection
+    
+    retry_count = 0
+    last_error = None
+    
+    while retry_count < max_retries:
+        try:
+            logger.info(f"Attempting to connect to MongoDB at {MONGODB_URI} (attempt {retry_count + 1}/{max_retries})")
+            
+            # Initialize MongoDB client with timeout
+            client = MongoClient(
+                MONGODB_URI,
+                serverSelectionTimeoutMS=MONGODB_CONNECT_TIMEOUT
+            )
+            
+            # Test the connection
+            client.admin.command('ping')
+            
+            # If we get here, connection is successful
+            db = client[MONGODB_DB]
+            
+            # Initialize collections
+            comparisons_collection = db["comparisons"]
+            game_sessions_collection = db["game_sessions"]
+            high_scores_collection = db["high_scores"]
+            reports_collection = db["reports"]
+            count_ranges_collection = db["count_ranges"]
+            
+            # Create indexes for better query performance
+            try:
+                comparisons_collection.create_index([("item1", 1), ("item2", 1)], unique=True)
+                game_sessions_collection.create_index("session_id", unique=True)
+                high_scores_collection.create_index([("score", -1)])  # Descending for high scores
+                reports_collection.create_index("session_id")
+                reports_collection.create_index("status")
+                reports_collection.create_index("created_at")
+                count_ranges_collection.create_index([("range_start", 1)], unique=True)
+            except Exception as e:
+                logger.warning(f"Failed to create indexes: {str(e)}")
+                # Continue anyway as this is not critical
+            
+            logger.info("Successfully connected to MongoDB")
+            return True, "Connection successful"
+            
+        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+            last_error = str(e)
+            retry_count += 1
+            
+            if retry_count < max_retries:
+                # Exponential backoff: 1s, 2s, 4s, etc.
+                wait_time = 2 ** (retry_count - 1)
+                logger.warning(f"Connection attempt {retry_count} failed: {last_error}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"Failed to connect to MongoDB after {max_retries} attempts: {last_error}")
+        
+        except Exception as e:
+            last_error = str(e)
+            logger.error(f"Unexpected error connecting to MongoDB: {last_error}")
+            break
+    
+    return False, f"Failed to connect to database: {last_error}"
 
-# Create indexes for better query performance
-comparisons_collection.create_index([("item1", 1), ("item2", 1)], unique=True)
-game_sessions_collection.create_index("session_id", unique=True)
-high_scores_collection.create_index([("score", -1)])  # Descending for high scores
-reports_collection.create_index("session_id")
-reports_collection.create_index("status")
-reports_collection.create_index("created_at")
-count_ranges_collection.create_index([("range_start", 1)], unique=True)
+def check_db_connection():
+    """
+    Check if the database connection is active.
+    
+    Returns:
+        bool: True if connection is active, False otherwise
+    """
+    global client
+    
+    if client is None:
+        return False
+    
+    try:
+        # Test the connection with a ping
+        client.admin.command('ping')
+        return True
+    except Exception as e:
+        logger.warning(f"Database connection check failed: {str(e)}")
+        return False
+
+# Initialize database connection on module import
+connection_success, connection_message = initialize_db_connection()
+if not connection_success:
+    logger.warning(f"Initial database connection failed: {connection_message}")
+    logger.warning("Some database operations may fail until connection is established")
 
 
 # Database sanitization functions
@@ -85,12 +186,26 @@ async def get_comparison(item1: str, item2: str) -> Optional[Dict]:
         
     Returns:
         The comparison document if found, None otherwise
+        
+    Raises:
+        Exception: If there's a database connection error
     """
-    # Sanitize inputs
-    safe_item1 = sanitize_db_input(item1)
-    safe_item2 = sanitize_db_input(item2)
+    # Check database connection
+    if not check_db_connection():
+        success, message = initialize_db_connection()
+        if not success:
+            raise Exception(f"Database connection error: {message}")
     
-    return comparisons_collection.find_one({"item1": safe_item1, "item2": safe_item2})
+    try:
+        # Sanitize inputs
+        safe_item1 = sanitize_db_input(item1)
+        safe_item2 = sanitize_db_input(item2)
+        
+        comparison = comparisons_collection.find_one({"item1": safe_item1, "item2": safe_item2})
+        return serialize_document(comparison)
+    except Exception as e:
+        logger.error(f"Error in get_comparison: {str(e)}")
+        raise Exception(f"Database error when retrieving comparison: {str(e)}")
 
 
 async def create_comparison(
@@ -118,29 +233,45 @@ async def create_comparison(
         
     Returns:
         The newly created comparison document
+        
+    Raises:
+        Exception: If there's a database connection error
     """
-    # Sanitize inputs
-    safe_item1 = sanitize_db_input(item1)
-    safe_item2 = sanitize_db_input(item2)
-    safe_description = sanitize_db_input(description)
-    safe_emoji = sanitize_db_input(emoji)
+    # Check database connection
+    if not check_db_connection():
+        success, message = initialize_db_connection()
+        if not success:
+            raise Exception(f"Database connection error: {message}")
     
-    now = datetime.utcnow()
-    comparison = {
-        "item1": safe_item1,
-        "item2": safe_item2,
-        "item1_wins": item1_wins,
-        "item2_wins": item2_wins,
-        "description": safe_description,
-        "emoji": safe_emoji,
-        "count": 1,
-        "created_at": now,
-        "updated_at": now
-    }
-    
-    result = comparisons_collection.insert_one(comparison)
-    comparison["_id"] = result.inserted_id
-    return comparison
+    try:
+        # Sanitize inputs
+        safe_item1 = sanitize_db_input(item1)
+        safe_item2 = sanitize_db_input(item2)
+        safe_description = sanitize_db_input(description)
+        safe_emoji = sanitize_db_input(emoji)
+        
+        now = datetime.utcnow()
+        comparison = {
+            "item1": safe_item1,
+            "item2": safe_item2,
+            "item1_wins": item1_wins,
+            "item2_wins": item2_wins,
+            "description": safe_description,
+            "emoji": safe_emoji,
+            "count": 1,
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        result = comparisons_collection.insert_one(comparison)
+        comparison["_id"] = result.inserted_id
+        return serialize_document(comparison)
+    except OperationFailure as e:
+        logger.error(f"Database operation failed in create_comparison: {str(e)}")
+        raise Exception(f"Database operation failed: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error in create_comparison: {str(e)}")
+        raise Exception(f"Database error when creating comparison: {str(e)}")
 
 
 async def increment_comparison_count(item1: str, item2: str) -> None:
@@ -170,30 +301,73 @@ async def increment_comparison_count(item1: str, item2: str) -> None:
 
 # Game session operations
 async def create_game_session() -> Dict:
-    """Create a new game session starting with 'rock'."""
-    session_id = str(ObjectId())
-    now = datetime.utcnow()
+    """
+    Create a new game session starting with 'rock'.
     
-    session = {
-        "session_id": session_id,
-        "current_item": "rock",
-        "previous_items": [],
-        "score": 0,
-        "is_active": True,
-        "created_at": now,
-        "updated_at": now
-    }
+    Returns:
+        The newly created game session document
+        
+    Raises:
+        Exception: If there's a database connection error
+    """
+    # Check database connection
+    if not check_db_connection():
+        success, message = initialize_db_connection()
+        if not success:
+            raise Exception(f"Database connection error: {message}")
     
-    result = game_sessions_collection.insert_one(session)
-    session["_id"] = result.inserted_id
-    return session
+    try:
+        session_id = str(ObjectId())
+        now = datetime.utcnow()
+        
+        session = {
+            "session_id": session_id,
+            "current_item": "rock",
+            "previous_items": [],
+            "score": 0,
+            "is_active": True,
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        result = game_sessions_collection.insert_one(session)
+        session["_id"] = result.inserted_id
+        return session
+    except OperationFailure as e:
+        logger.error(f"Database operation failed in create_game_session: {str(e)}")
+        raise Exception(f"Database operation failed: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error in create_game_session: {str(e)}")
+        raise Exception(f"Database error when creating game session: {str(e)}")
 
 
 async def get_game_session(session_id: str) -> Optional[Dict]:
-    """Get a game session by its ID."""
-    # Sanitize input
-    safe_session_id = sanitize_db_input(session_id)
-    return game_sessions_collection.find_one({"session_id": safe_session_id})
+    """
+    Get a game session by its ID.
+    
+    Args:
+        session_id: The unique session ID
+        
+    Returns:
+        The game session document if found, None otherwise
+        
+    Raises:
+        Exception: If there's a database connection error
+    """
+    # Check database connection
+    if not check_db_connection():
+        success, message = initialize_db_connection()
+        if not success:
+            raise Exception(f"Database connection error: {message}")
+    
+    try:
+        # Sanitize input
+        safe_session_id = sanitize_db_input(session_id)
+        session = game_sessions_collection.find_one({"session_id": safe_session_id})
+        return serialize_document(session)
+    except Exception as e:
+        logger.error(f"Error in get_game_session: {str(e)}")
+        raise Exception(f"Database error when retrieving game session: {str(e)}")
 
 
 async def update_game_session(
@@ -283,7 +457,7 @@ async def save_high_score(session_id: str, score: int, items_chain: List[str]) -
     
     result = high_scores_collection.insert_one(high_score)
     high_score["_id"] = result.inserted_id
-    return high_score
+    return serialize_document(high_score)
 
 
 async def get_high_scores(
@@ -330,10 +504,53 @@ async def get_high_scores(
         .limit(limit)
     )
     
+    # Serialize documents to handle ObjectId fields
+    serialized_high_scores = [serialize_document(score) for score in high_scores]
+    
     return {
-        "high_scores": high_scores,
+        "high_scores": serialized_high_scores,
         "total_count": total_count
     }
+
+
+# Helper function for serializing MongoDB documents
+def serialize_document(doc: Optional[Dict]) -> Optional[Dict]:
+    """
+    Convert MongoDB document to a JSON-serializable dictionary.
+    
+    This function recursively converts ObjectId fields to strings and handles
+    nested dictionaries and lists.
+    
+    Args:
+        doc: MongoDB document or None
+        
+    Returns:
+        JSON-serializable dictionary or None
+    """
+    if doc is None:
+        return None
+    
+    result = {}
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            # Convert ObjectId to string
+            result[key] = str(value)
+        elif isinstance(value, dict):
+            # Recursively serialize nested dictionaries
+            result[key] = serialize_document(value)
+        elif isinstance(value, list):
+            # Recursively serialize items in lists
+            result[key] = [
+                serialize_document(item) if isinstance(item, dict)
+                else str(item) if isinstance(item, ObjectId)
+                else item
+                for item in value
+            ]
+        else:
+            # Keep other types as is
+            result[key] = value
+    
+    return result
 
 
 # Statistics operations
@@ -343,12 +560,10 @@ async def get_comparison_stats(limit: int = 20) -> List[Dict]:
         # Convert MongoDB cursor to list and handle BSON serialization
         comparisons = list(comparisons_collection.find().sort("count", -1).limit(limit))
         
-        # Convert ObjectId to string for proper JSON serialization
-        for comparison in comparisons:
-            if "_id" in comparison:
-                comparison["_id"] = str(comparison["_id"])
+        # Serialize documents to handle ObjectId fields
+        serialized_comparisons = [serialize_document(comparison) for comparison in comparisons]
         
-        return comparisons
+        return serialized_comparisons
     except Exception as e:
         # Log the error and re-raise with more context
         print(f"Error retrieving comparison stats: {str(e)}")
@@ -400,7 +615,7 @@ async def create_report(
     
     result = reports_collection.insert_one(report)
     report["_id"] = result.inserted_id
-    return report
+    return serialize_document(report)
 
 
 async def get_report(report_id: str) -> Optional[Dict]:
@@ -413,12 +628,21 @@ async def get_report(report_id: str) -> Optional[Dict]:
     Returns:
         The report document if found, None otherwise
     """
-    return reports_collection.find_one({"report_id": report_id})
+    report = reports_collection.find_one({"report_id": report_id})
+    return serialize_document(report)
 
 
 async def update_report_status(report_id: str, status: str) -> Optional[Dict]:
     """
     Update the status of a report.
+    
+    When a report is approved:
+    - Set item1_wins to False
+    - Set item2_wins to True
+    
+    When a report is rejected:
+    - Set item1_wins to True
+    - Set item2_wins to False
     
     Args:
         report_id: The unique report ID
@@ -427,6 +651,12 @@ async def update_report_status(report_id: str, status: str) -> Optional[Dict]:
     Returns:
         The updated report document if found, None otherwise
     """
+    # First, get the report to access its items
+    report = await get_report(report_id)
+    if not report:
+        return None
+    
+    # Update the report status
     result = reports_collection.update_one(
         {"report_id": report_id},
         {
@@ -436,6 +666,39 @@ async def update_report_status(report_id: str, status: str) -> Optional[Dict]:
             }
         }
     )
+    
+    # If the report was approved or rejected, update the corresponding comparison
+    if status == "approved" or status == "rejected":
+        item1 = report["item1"]
+        item2 = report["item2"]
+        
+        # Set the item1_wins and item2_wins values based on the status
+        item1_wins = status == "rejected"  # True if rejected, False if approved
+        item2_wins = status == "approved"  # True if approved, False if rejected
+        
+        # Check if a comparison exists
+        existing_comparison = await get_comparison(item1, item2)
+        
+        if existing_comparison:
+            # Update the existing comparison
+            await update_comparison(
+                item1=item1,
+                item2=item2,
+                item1_wins=item1_wins,
+                item2_wins=item2_wins,
+                description=existing_comparison.get("description", ""),
+                emoji=existing_comparison.get("emoji", "")
+            )
+        else:
+            # Create a new comparison
+            await create_comparison(
+                item1=item1,
+                item2=item2,
+                item1_wins=item1_wins,
+                item2_wins=item2_wins,
+                description="Updated based on admin review",
+                emoji="🔄"
+            )
     
     if result.modified_count:
         return await get_report(report_id)
@@ -462,12 +725,15 @@ async def get_reports(
     if status:
         query["status"] = status
     
-    return list(
+    reports = list(
         reports_collection.find(query)
         .sort("created_at", -1)
         .skip(skip)
         .limit(limit)
     )
+    
+    # Serialize documents to handle ObjectId fields
+    return [serialize_document(report) for report in reports]
 
 
 async def update_comparison(
@@ -513,7 +779,8 @@ async def update_comparison(
     
     if result.modified_count:
         # Return the updated document
-        return await get_comparison(item1, item2)
+        comparison = await get_comparison(item1, item2)
+        return serialize_document(comparison)
     
     # If no document was modified, return None
     return None
@@ -534,7 +801,7 @@ async def get_count_range_description(count: int) -> Optional[Dict]:
         The count range description document if found, None otherwise
     """
     # Find a range where range_start <= count <= range_end (or range_end is None)
-    return count_ranges_collection.find_one({
+    range_doc = count_ranges_collection.find_one({
         "$and": [
             {"range_start": {"$lte": count}},
             {"$or": [
@@ -543,6 +810,7 @@ async def get_count_range_description(count: int) -> Optional[Dict]:
             ]}
         ]
     })
+    return serialize_document(range_doc)
 
 
 async def create_count_range_description(
@@ -576,7 +844,7 @@ async def create_count_range_description(
     
     result = count_ranges_collection.insert_one(count_range)
     count_range["_id"] = result.inserted_id
-    return count_range
+    return serialize_document(count_range)
 
 
 async def get_all_count_ranges() -> List[Dict]:
@@ -586,4 +854,5 @@ async def get_all_count_ranges() -> List[Dict]:
     Returns:
         List of all count range description documents
     """
-    return list(count_ranges_collection.find().sort("range_start", 1))
+    ranges = list(count_ranges_collection.find().sort("range_start", 1))
+    return [serialize_document(range_doc) for range_doc in ranges]

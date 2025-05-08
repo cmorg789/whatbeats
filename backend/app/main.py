@@ -44,15 +44,15 @@ load_dotenv(dotenv_path=env_path)
 
 # Create FastAPI app
 app = FastAPI(
-    title="What Beats Rock? API",
-    description="API for the 'What Beats Rock?' game",
-    version="1.0.0"
+    # Disable Swagger UI and ReDoc documentation
+    docs_url=None,
+    redoc_url=None
 )
 
 # Add CORS middleware with restricted origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080", "https://whatbeats.example.com"],  # Restrict to specific origins
+    allow_origins=["http://localhost:3000", "http://localhost:8080", "http://localhost:8000", "https://whatbeats.example.com"],  # Restrict to specific origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Accept", "Authorization", "X-API-Key"],

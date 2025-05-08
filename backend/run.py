@@ -21,7 +21,6 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     
     print(f"Starting What Beats Rock? backend on port {port}...")
-    print("API documentation will be available at http://localhost:{port}/docs")
     
     # Run the FastAPI application with Uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)

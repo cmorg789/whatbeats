@@ -1,0 +1,44 @@
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: whatbeats-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    networks:
+      - whatbeats-network
+
+  whatbeats:
+    build:
+      context: ..
+      dockerfile: whatbeats/Dockerfile
+    container_name: whatbeats-app
+    ports:
+      - "8000:8000"  # Backend API
+      - "3000:3000"  # Frontend
+    depends_on:
+      - mongodb
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB=whatbeats
+      # Required environment variables - must be set in .env file or uncommented here
+      # - JWT_SECRET_KEY=your_jwt_secret
+      # - ADMIN_PASSWORD_HASH=your_admin_password_hash
+      # - LLM_API_KEY=your_llm_api_key
+    volumes:
+      - ./.env:/app/.env:ro  # Mount .env file from host
+    restart: unless-stopped
+    networks:
+      - whatbeats-network
+
+volumes:
+  mongodb_data:
+    name: whatbeats-mongodb-data
+
+networks:
+  whatbeats-network:
+    name: whatbeats-network
+    driver: bridge
+

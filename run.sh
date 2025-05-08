@@ -112,25 +112,9 @@ echo "Frontend server started with PID: $FRONTEND_PID"
 echo "Waiting for frontend to initialize..."
 sleep 2
 
-# Open the application in a web browser
-echo "Opening application in web browser..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    open http://localhost:3000
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    xdg-open http://localhost:3000
-elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-    # Windows
-    start http://localhost:3000
-else
-    echo "Please open http://localhost:3000 in your web browser."
-fi
-
 echo "Application is now running!"
 echo "- Frontend: http://localhost:3000"
 echo "- Backend API: http://localhost:8000"
-echo "- API Documentation: http://localhost:8000/docs"
 echo ""
 echo "Press Ctrl+C to stop all servers."
 

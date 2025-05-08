@@ -118,15 +118,6 @@ function initApp() {
     // Add client-side validation for user input
     elements.userInput.addEventListener('input', validateUserInput);
     
-    // Add client-side validation for user input
-    elements.userInput.addEventListener('input', validateUserInput);
-    
-    // Add client-side validation for user input
-    elements.userInput.addEventListener('input', validateUserInput);
-    
-    // Add client-side validation for user input
-    elements.userInput.addEventListener('input', validateUserInput);
-    
     // Scoreboard functionality
     elements.prevPageBtn.addEventListener('click', () => navigateScoreboardPage(-1));
     elements.nextPageBtn.addEventListener('click', () => navigateScoreboardPage(1));
@@ -1469,92 +1460,6 @@ function validateUserInputBeforeSubmit(userInput) {
     return { valid: true };
 }
 
-/**
- * Validate user input as they type
- * Provides real-time feedback on input validity
- */
-function validateUserInput(event) {
-    const input = event.target;
-    const value = input.value.trim();
-    
-    // Clear previous validation messages
-    const existingErrorMsg = document.getElementById('input-validation-error');
-    if (existingErrorMsg) {
-        existingErrorMsg.remove();
-    }
-    
-    // Skip validation for empty input
-    if (!value) {
-        input.classList.remove('invalid-input');
-        return;
-    }
-    
-    // Validate input length
-    if (value.length > 50) {
-        input.classList.add('invalid-input');
-        showInputValidationError(input, 'Input too long (max 50 characters)');
-        return;
-    }
-    
-    // Validate input characters
-    if (!/^[a-zA-Z0-9\s.,!?-]+$/.test(value)) {
-        input.classList.add('invalid-input');
-        showInputValidationError(input, 'Input contains invalid characters');
-        return;
-    }
-    
-    // Input is valid
-    input.classList.remove('invalid-input');
-}
-
-/**
- * Show validation error message below input field
- */
-function showInputValidationError(inputElement, message) {
-    // Create error message element if it doesn't exist
-    let errorMsg = document.getElementById('input-validation-error');
-    if (!errorMsg) {
-        errorMsg = document.createElement('div');
-        errorMsg.id = 'input-validation-error';
-        errorMsg.className = 'validation-error';
-        inputElement.parentNode.insertBefore(errorMsg, inputElement.nextSibling);
-    }
-    
-    // Set error message
-    errorMsg.textContent = message;
-}
-
-/**
- * Validate user input before form submission
- * Returns an object with validation result and error message
- */
-function validateUserInputBeforeSubmit(userInput) {
-    // Validate input length
-    if (userInput.length > 50) {
-        return {
-            valid: false,
-            message: 'Input too long (max 50 characters)'
-        };
-    }
-    
-    // Validate input characters
-    if (!/^[a-zA-Z0-9\s.,!?-]+$/.test(userInput)) {
-        return {
-            valid: false,
-            message: 'Input contains invalid characters'
-        };
-    }
-    
-    // Check for potentially harmful inputs (simple XSS prevention)
-    if (/<script|javascript:|onerror=|onclick=|alert\(|eval\(|document\.cookie/i.test(userInput)) {
-        return {
-            valid: false,
-            message: 'Input contains potentially harmful content'
-        };
-    }
-    
-    return { valid: true };
-}
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', initApp);
