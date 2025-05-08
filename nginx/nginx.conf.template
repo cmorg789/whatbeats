@@ -36,8 +36,6 @@ http {
         "~^https?://127\.0\.0\.1(:[0-9]+)?$" "$http_origin";
         "http://localhost:8000" "$http_origin";
         # Add your production domains here
-        "https://whatbeats.com" "$http_origin";
-        "https://www.whatbeats.com" "$http_origin";
         # You can add more domains as needed
     }
     
