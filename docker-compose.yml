@@ -5,13 +5,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    # depends_on: # Optional, can often be removed
-    #   - frontend
-    #   - backend
     environment:
       - DOMAIN=${DOMAIN:-localhost}
       - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
-      - ENABLE_SSL=${ENABLE_SSL:-false}
     command:
       - "--api.dashboard=true" # API is enabled by default, this enables the dashboard part
       # Entry points configuration
@@ -43,25 +39,25 @@ services:
     labels:
       - "traefik.enable=true"
 
-      # Router for Traefik Dashboard (adjust Host rule as needed)
-      # - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      # 1. Define the StripPrefix middleware for the dashboard path
+      - "traefik.http.middlewares.strip-traefik-prefix.stripprefix.prefixes=/traefik" # Or /dashboard, etc.
+
+      # 2. Router for Traefik Dashboard using PathPrefix
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`${DOMAIN}`) && PathPrefix(`/traefik`)" # Or /dashboard
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
       - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
-      # Example: Apply security headers and basic auth (define traefik-auth middleware below or elsewhere)
-      # - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth@docker,security-headers@docker"
-      - "traefik.http.routers.traefik-dashboard.middlewares=security-headers@docker" # Apply security headers
+      # 3. Apply BOTH the strip prefix middleware AND your security headers middleware
+      # The order might matter if one depends on the other, but usually StripPrefix first is fine.
+      - "traefik.http.routers.traefik-dashboard.middlewares=strip-traefik-prefix@docker,security-headers@docker"
 
-      # Basic Auth Middleware Definition (generate user:hashed_password, e.g. with htpasswd)
-      # - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$......"
-
-      # Security headers middleware definition
-      - "traefik.http.middlewares.security-headers.headers.customFrameOptionsValue=SAMEORIGIN" # Or .frameDeny=true
+      # Security headers middleware definition (as before)
+      - "traefik.http.middlewares.security-headers.headers.customFrameOptionsValue=SAMEORIGIN"
       - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.security-headers.headers.referrerPolicy=same-origin"
       - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.security-headers.headers.stsPreload=true" # Be sure before enabling preload
+      - "traefik.http.middlewares.security-headers.headers.stsPreload=true" # Be sure
 
 
   # MongoDB database
@@ -107,18 +103,13 @@ services:
     command: ["python", "/app/backend/run.py"]
     labels:
       - "traefik.enable=true"
-      # HTTP router
-      - "traefik.http.routers.backend.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
-      - "traefik.http.routers.backend.entrypoints=web"
-      - "traefik.http.routers.backend.service=backend-service"
-      # HTTPS router
-      - "traefik.http.routers.backend-secure.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
-      - "traefik.http.routers.backend-secure.entrypoints=websecure"
-      - "traefik.http.routers.backend-secure.service=backend-service"
-      - "traefik.http.routers.backend-secure.tls=true"
-      - "traefik.http.routers.backend-secure.tls.certresolver=letsencrypt"
-      # Service definition
-      - "traefik.http.services.backend-service.loadbalancer.server.port=8000"
+      # HTTPS router (primary)
+      - "traefik.http.routers.backend.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)" # Simplified router name
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.middlewares=security-headers@docker" # Add if you want these headers on API
+      - "traefik.http.services.backend.loadbalancer.server.port=8000" # Simplified service name
 
   # Frontend service
   frontend:
@@ -142,18 +133,13 @@ services:
     command: ["node", "/app/frontend/server.js"]
     labels:
       - "traefik.enable=true"
-      # HTTP router
-      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
-      - "traefik.http.routers.frontend.entrypoints=web"
-      - "traefik.http.routers.frontend.service=frontend-service"
-      # HTTPS router
-      - "traefik.http.routers.frontend-secure.rule=Host(`${DOMAIN:-localhost}`)"
-      - "traefik.http.routers.frontend-secure.entrypoints=websecure"
-      - "traefik.http.routers.frontend-secure.service=frontend-service"
-      - "traefik.http.routers.frontend-secure.tls=true"
-      - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
-      # Service definition
-      - "traefik.http.services.frontend-service.loadbalancer.server.port=3000"
+      # HTTPS router (primary)
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)" # Simplified router name
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend.middlewares=security-headers@docker" # Add security headers
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000" # Simplified service name
 
 volumes:
   mongodb_data:
