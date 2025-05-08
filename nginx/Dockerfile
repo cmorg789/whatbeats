@@ -1,4 +1,4 @@
-FROM nginx:1.25-alpine
+FROM nginx:1.28-alpine-slim
 
 # Install dependencies for certbot
 RUN apk add --no-cache certbot certbot-nginx bash openssl

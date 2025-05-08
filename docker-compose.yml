@@ -24,7 +24,7 @@ services:
 
   # MongoDB database
   mongodb:
-    image: mongo:8.0
+    image: mongo
     container_name: whatbeats-mongodb
     # No need to expose MongoDB port to host anymore
     # ports:
