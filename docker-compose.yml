@@ -44,7 +44,7 @@ services:
       - "traefik.enable=true"
 
       # Router for Traefik Dashboard (adjust Host rule as needed)
-      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      # - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
       - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
@@ -111,8 +111,6 @@ services:
       - "traefik.http.routers.backend.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.routers.backend.service=backend-service"
-      # Apply middleware for HTTP to HTTPS redirect if SSL is enabled
-      - "traefik.http.routers.backend.middlewares=redirect-to-https@docker"
       # HTTPS router
       - "traefik.http.routers.backend-secure.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
       - "traefik.http.routers.backend-secure.entrypoints=websecure"
@@ -148,8 +146,6 @@ services:
       - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.service=frontend-service"
-      # Apply middleware for HTTP to HTTPS redirect if SSL is enabled
-      - "traefik.http.routers.frontend.middlewares=redirect-to-https@docker"
       # HTTPS router
       - "traefik.http.routers.frontend-secure.rule=Host(`${DOMAIN:-localhost}`)"
       - "traefik.http.routers.frontend-secure.entrypoints=websecure"
