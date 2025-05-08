@@ -1,5 +1,5 @@
 # Use multi-stage build for smaller final images
-FROM python:3.9-slim AS python-deps
+FROM python:3.13-alpine AS python-deps
 
 # Set working directory
 WORKDIR /app
@@ -9,7 +9,7 @@ COPY whatbeats/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Node.js dependencies stage
-FROM node:20-slim AS node-deps
+FROM node:24-slim AS node-deps
 
 # Set working directory
 WORKDIR /app
@@ -19,7 +19,7 @@ COPY whatbeats/frontend/package.json whatbeats/frontend/package-lock.json ./fron
 RUN cd frontend && npm ci --only=production
 
 # Backend stage
-FROM python:3.9-slim AS backend-stage
+FROM python:3.13-alpine AS backend-stage
 
 # Set working directory
 WORKDIR /app
@@ -52,7 +52,7 @@ EXPOSE 8000
 CMD ["python", "/app/backend/run.py"]
 
 # Frontend stage
-FROM node:20-slim AS frontend-stage
+FROM node:24-slim AS frontend-stage
 
 # Set working directory
 WORKDIR /app

@@ -43,7 +43,7 @@ services:
       - "traefik.http.middlewares.strip-traefik-prefix.stripprefix.prefixes=/traefik" # Or /dashboard, etc.
 
       # 2. Router for Traefik Dashboard using PathPrefix
-      - "traefik.http.routers.traefik-dashboard.rule=Host(`${DOMAIN}`) && PathPrefix(`/traefik`)" # Or /dashboard
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`${DOMAIN}`) && PathPrefix(`/traefik/`)" # Or /dashboard
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
       - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
