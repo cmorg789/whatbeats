@@ -5,7 +5,7 @@ location /api/ {
     # Include CORS headers with direct OPTIONS handling
     include /etc/nginx/snippets/cors_headers.conf;
     
-    proxy_pass http://backend:8000;
+    proxy_pass http://whatbeats-backend:8000;
     include /etc/nginx/snippets/proxy_params.conf;
 }
 
@@ -14,7 +14,7 @@ location /health {
     # Include CORS headers with direct OPTIONS handling
     include /etc/nginx/snippets/cors_headers.conf;
     
-    proxy_pass http://backend:8000/health;
+    proxy_pass http://whatbeats-backend:8000/health;
     include /etc/nginx/snippets/proxy_params.conf;
 }
 
@@ -23,6 +23,6 @@ location / {
     # Include CORS headers with direct OPTIONS handling
     include /etc/nginx/snippets/cors_headers.conf;
     
-    proxy_pass http://frontend:3000;
+    proxy_pass http://whatbeats-frontend:3000;
     include /etc/nginx/snippets/proxy_params.conf;
 }
