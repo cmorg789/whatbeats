@@ -1,9 +1,7 @@
 services:
   # Traefik reverse proxy
   traefik:
-    build:
-      context: .
-      dockerfile: traefik/Dockerfile
+    image: traefik:3.4
     container_name: whatbeats-traefik
     ports:
       - "80:80"  # HTTP port
@@ -11,16 +9,56 @@ services:
     depends_on:
       - frontend
       - backend
+    # Create necessary directories
+    user: root
     environment:
       - DOMAIN=${DOMAIN:-localhost}
       - ENABLE_SSL=${ENABLE_SSL:-false}
-      - SSL_EMAIL=${SSL_EMAIL:-}
+      - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
+    entrypoint: >
+      /bin/sh -c "
+        mkdir -p /var/log/traefik /etc/traefik/acme &&
+        touch /var/log/traefik/access.log &&
+        chmod 600 /etc/traefik/acme/acme.json 2>/dev/null || true &&
+        /entrypoint.sh"
+    command:
+      # API and dashboard configuration
+      - "--api.insecure=false"
+      - "--api.dashboard=true"
+      # Entry points configuration
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Providers configuration
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=whatbeats-network"
+      # Let's Encrypt configuration
+      - "--certificatesresolvers.letsencrypt.acme.email=${SSL_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # Log configuration
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--accesslog.bufferingsize=100"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for dynamic configuration
       - traefik_certs:/etc/traefik/acme  # For storing SSL certificates
     restart: unless-stopped
     networks:
       - whatbeats-network
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+      # Global HTTP to HTTPS redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      # Security headers middleware
+      - "traefik.http.middlewares.security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.security-headers.headers.browserxssfilter=true"
+      - "traefik.http.middlewares.security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.security-headers.headers.customframeoptionsvalue=SAMEORIGIN"
+      - "traefik.http.middlewares.security-headers.headers.referrerpolicy=same-origin"
 
   # MongoDB database
   mongodb:
@@ -65,14 +103,20 @@ services:
     command: ["python", "/app/backend/run.py"]
     labels:
       - "traefik.enable=true"
+      # HTTP router
       - "traefik.http.routers.backend.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
       - "traefik.http.routers.backend.entrypoints=web"
-      - "traefik.http.services.backend.loadbalancer.server.port=8000"
-      # SSL configuration (applied conditionally by traefik-entrypoint.sh)
+      - "traefik.http.routers.backend.service=backend-service"
+      # Apply middleware for HTTP to HTTPS redirect if SSL is enabled
+      - "traefik.http.routers.backend.middlewares=redirect-to-https@docker"
+      # HTTPS router
       - "traefik.http.routers.backend-secure.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
       - "traefik.http.routers.backend-secure.entrypoints=websecure"
+      - "traefik.http.routers.backend-secure.service=backend-service"
       - "traefik.http.routers.backend-secure.tls=true"
       - "traefik.http.routers.backend-secure.tls.certresolver=letsencrypt"
+      # Service definition
+      - "traefik.http.services.backend-service.loadbalancer.server.port=8000"
 
   # Frontend service
   frontend:
@@ -96,17 +140,20 @@ services:
     command: ["node", "/app/frontend/server.js"]
     labels:
       - "traefik.enable=true"
+      # HTTP router
       - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
       - "traefik.http.routers.frontend.entrypoints=web"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
-      # SSL configuration (applied conditionally by traefik-entrypoint.sh)
+      - "traefik.http.routers.frontend.service=frontend-service"
+      # Apply middleware for HTTP to HTTPS redirect if SSL is enabled
+      - "traefik.http.routers.frontend.middlewares=redirect-to-https@docker"
+      # HTTPS router
       - "traefik.http.routers.frontend-secure.rule=Host(`${DOMAIN:-localhost}`)"
       - "traefik.http.routers.frontend-secure.entrypoints=websecure"
+      - "traefik.http.routers.frontend-secure.service=frontend-service"
       - "traefik.http.routers.frontend-secure.tls=true"
       - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
-      # HTTP to HTTPS redirect middleware (applied conditionally)
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      # Service definition
+      - "traefik.http.services.frontend-service.loadbalancer.server.port=3000"
 
 volumes:
   mongodb_data:
