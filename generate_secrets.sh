@@ -80,7 +80,7 @@ if $FORCE_RESET || ! secret_exists "ADMIN_PASSWORD_HASH"; then
     fi
     
     # This requires bcrypt to be installed: pip install bcrypt
-    ADMIN_PASSWORD_HASH=$(python -c "import bcrypt; print(bcrypt.hashpw('$ADMIN_PASSWORD'.encode(), bcrypt.gensalt()).decode())")
+    ADMIN_PASSWORD_HASH=$(python3 -c "import bcrypt; print(bcrypt.hashpw('$ADMIN_PASSWORD'.encode(), bcrypt.gensalt()).decode())")
     update_secret "ADMIN_PASSWORD_HASH" "$ADMIN_PASSWORD_HASH"
     echo "Admin password hash updated"
 else

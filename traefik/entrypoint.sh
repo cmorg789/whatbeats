@@ -22,6 +22,28 @@ http:
         stsPreload: true
         stsSeconds: 31536000
         customFrameOptionsValue: "SAMEORIGIN"
+        
+  routers:
+    frontend:
+      rule: "Host(\`${DOMAIN}\`)"
+      entrypoints:
+        - web
+      service: frontend
+    backend:
+      rule: "Host(\`${DOMAIN}\`) && PathPrefix(\`/api/\`)"
+      entrypoints:
+        - web
+      service: backend
+      
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:3000"
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8000"
 EOF
 
 # Check if SSL is enabled
@@ -38,21 +60,77 @@ http:
         permanent: true
         
   routers:
+    # HTTP routers with redirect middleware
     frontend:
+      rule: "Host(\`${DOMAIN}\`)"
+      entrypoints:
+        - web
       middlewares:
         - redirect-to-https
+      service: frontend
     backend:
+      rule: "Host(\`${DOMAIN}\`) && PathPrefix(\`/api/\`)"
+      entrypoints:
+        - web
       middlewares:
         - redirect-to-https
+      service: backend
+      
+    # HTTPS secure routers
+    frontend-secure:
+      rule: "Host(\`${DOMAIN}\`)"
+      entrypoints:
+        - websecure
+      service: frontend
+      tls:
+        certResolver: letsencrypt
+    backend-secure:
+      rule: "Host(\`${DOMAIN}\`) && PathPrefix(\`/api/\`)"
+      entrypoints:
+        - websecure
+      service: backend
+      tls:
+        certResolver: letsencrypt
+      
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:3000"
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8000"
 EOF
 
   echo "SSL configuration created."
 else
   echo "SSL is disabled. Using HTTP only."
   
-  # Create empty SSL configuration to avoid errors
+  # Create configuration for HTTP-only mode
   cat > /etc/traefik/dynamic/ssl.yml << EOF
-# SSL disabled - no redirects configured
+http:
+  routers:
+    frontend:
+      rule: "Host(\`${DOMAIN}\`)"
+      entrypoints:
+        - web
+      service: frontend
+    backend:
+      rule: "Host(\`${DOMAIN}\`) && PathPrefix(\`/api/\`)"
+      entrypoints:
+        - web
+      service: backend
+      
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:3000"
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8000"
 EOF
 fi
 
@@ -74,4 +152,24 @@ echo "Traefik configuration completed."
 
 # Start Traefik
 echo "Starting Traefik..."
+
+# Debug: Print environment variables
+echo "DEBUG: Environment variables:"
+echo "DOMAIN: ${DOMAIN}"
+echo "ENABLE_SSL: ${ENABLE_SSL}"
+echo "SSL_EMAIL: '${SSL_EMAIL}'"
+
+# Debug: List dynamic configuration files
+echo "DEBUG: Dynamic configuration files:"
+ls -la /etc/traefik/dynamic/
+
+# Debug: Print content of dynamic configuration files
+echo "DEBUG: Content of base.yml:"
+cat /etc/traefik/dynamic/base.yml
+echo "DEBUG: Content of ssl.yml:"
+cat /etc/traefik/dynamic/ssl.yml
+echo "DEBUG: Content of middlewares.yml:"
+cat /etc/traefik/dynamic/middlewares.yml
+
+# Start Traefik
 exec traefik
