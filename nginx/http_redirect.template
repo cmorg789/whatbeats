@@ -1,2 +1,0 @@
-# Redirect all HTTP traffic to HTTPS
-return 301 https://$host$request_uri;

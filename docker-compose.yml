@@ -1,10 +1,10 @@
 services:
-  # Nginx reverse proxy
-  nginx:
+  # Traefik reverse proxy
+  traefik:
     build:
       context: .
-      dockerfile: nginx/Dockerfile
-    container_name: whatbeats-nginx
+      dockerfile: traefik/Dockerfile
+    container_name: whatbeats-traefik
     ports:
       - "80:80"  # HTTP port
       - "443:443"  # HTTPS port (for SSL)
@@ -16,8 +16,8 @@ services:
       - ENABLE_SSL=${ENABLE_SSL:-false}
       - SSL_EMAIL=${SSL_EMAIL:-}
     volumes:
-      - letsencrypt_certs:/etc/letsencrypt  # For storing SSL certificates
-      - letsencrypt_challenges:/var/www/certbot  # For Let's Encrypt validation
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for dynamic configuration
+      - traefik_certs:/etc/traefik/acme  # For storing SSL certificates
     restart: unless-stopped
     networks:
       - whatbeats-network
@@ -52,7 +52,7 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongodb:27017
       - MONGODB_DB=whatbeats
-      - ENABLE_CORS=false  # CORS is handled by Nginx
+      - ENABLE_CORS=false  # CORS is handled by Traefik
       # Required environment variables - must be set in .env file or uncommented here
       # - JWT_SECRET_KEY=your_jwt_secret
       # - ADMIN_PASSWORD_HASH=your_admin_password_hash
@@ -63,6 +63,16 @@ services:
     networks:
       - whatbeats-network
     command: ["python", "/app/backend/run.py"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.backend.entrypoints=web"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      # SSL configuration (applied conditionally by traefik-entrypoint.sh)
+      - "traefik.http.routers.backend-secure.rule=Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.backend-secure.entrypoints=websecure"
+      - "traefik.http.routers.backend-secure.tls=true"
+      - "traefik.http.routers.backend-secure.tls.certresolver=letsencrypt"
 
   # Frontend service
   frontend:
@@ -84,14 +94,25 @@ services:
     networks:
       - whatbeats-network
     command: ["node", "/app/frontend/server.js"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      # SSL configuration (applied conditionally by traefik-entrypoint.sh)
+      - "traefik.http.routers.frontend-secure.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.frontend-secure.entrypoints=websecure"
+      - "traefik.http.routers.frontend-secure.tls=true"
+      - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
+      # HTTP to HTTPS redirect middleware (applied conditionally)
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
 volumes:
   mongodb_data:
     name: whatbeats-mongodb-data
-  letsencrypt_certs:
-    name: whatbeats-letsencrypt-certs
-  letsencrypt_challenges:
-    name: whatbeats-letsencrypt-challenges
+  traefik_certs:
+    name: whatbeats-traefik-certs
 
 networks:
   whatbeats-network:
