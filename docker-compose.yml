@@ -1,32 +1,23 @@
 services:
-  # Traefik reverse proxy
   traefik:
-    image: traefik:3.4
+    image: traefik
     container_name: whatbeats-traefik
     ports:
-      - "80:80"  # HTTP port
-      - "443:443"  # HTTPS port (for SSL)
-    depends_on:
-      - frontend
-      - backend
-    # Create necessary directories
-    user: root
+      - "80:80"
+      - "443:443"
+    # depends_on: # Optional, can often be removed
+    #   - frontend
+    #   - backend
     environment:
       - DOMAIN=${DOMAIN:-localhost}
-      - ENABLE_SSL=${ENABLE_SSL:-false}
       - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
-    entrypoint: >
-      /bin/sh -c "
-        mkdir -p /var/log/traefik /etc/traefik/acme &&
-        touch /var/log/traefik/access.log &&
-        chmod 600 /etc/traefik/acme/acme.json 2>/dev/null || true &&
-        /entrypoint.sh"
+      - ENABLE_SSL=${ENABLE_SSL:-false}
     command:
-      # API and dashboard configuration
-      - "--api.insecure=false"
-      - "--api.dashboard=true"
+      - "--api.dashboard=true" # API is enabled by default, this enables the dashboard part
       # Entry points configuration
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
       # Providers configuration
       - "--providers.docker=true"
@@ -41,24 +32,37 @@ services:
       - "--accesslog=true"
       - "--accesslog.filepath=/var/log/traefik/access.log"
       - "--accesslog.bufferingsize=100"
+      # - "--api.insecure=true" # ONLY for local dev if you absolutely need http access to API/dashboard and understand risks
+                                # Better to configure a router for the dashboard as below.
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for dynamic configuration
-      - traefik_certs:/etc/traefik/acme  # For storing SSL certificates
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/etc/traefik/acme
     restart: unless-stopped
     networks:
-      - whatbeats-network
+      - whatbeats-network # Ensure this network is defined elsewhere
     labels:
-      # Enable Traefik for this service
       - "traefik.enable=true"
-      # Global HTTP to HTTPS redirect
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
-      # Security headers middleware
-      - "traefik.http.middlewares.security-headers.headers.framedeny=true"
-      - "traefik.http.middlewares.security-headers.headers.browserxssfilter=true"
-      - "traefik.http.middlewares.security-headers.headers.contenttypenosniff=true"
-      - "traefik.http.middlewares.security-headers.headers.customframeoptionsvalue=SAMEORIGIN"
-      - "traefik.http.middlewares.security-headers.headers.referrerpolicy=same-origin"
+
+      # Router for Traefik Dashboard (adjust Host rule as needed)
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      # Example: Apply security headers and basic auth (define traefik-auth middleware below or elsewhere)
+      # - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth@docker,security-headers@docker"
+      - "traefik.http.routers.traefik-dashboard.middlewares=security-headers@docker" # Apply security headers
+
+      # Basic Auth Middleware Definition (generate user:hashed_password, e.g. with htpasswd)
+      # - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$......"
+
+      # Security headers middleware definition
+      - "traefik.http.middlewares.security-headers.headers.customFrameOptionsValue=SAMEORIGIN" # Or .frameDeny=true
+      - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.security-headers.headers.referrerPolicy=same-origin"
+      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.security-headers.headers.stsPreload=true" # Be sure before enabling preload
+
 
   # MongoDB database
   mongodb:
